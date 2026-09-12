@@ -82,6 +82,8 @@ export type Dashboard = {
   prices_live: boolean;
   history_from: string | null;
   invested_missing: boolean;
+  xirr_percent: string | null;
+  xirr_from: string | null;
   positions: DashboardPosition[];
 };
 

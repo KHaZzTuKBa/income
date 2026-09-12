@@ -90,6 +90,8 @@ class DashboardOut(BaseModel):
     prices_live: bool = False
     history_from: date | None = None
     invested_missing: bool = False
+    xirr_percent: str | None = None
+    xirr_from: date | None = None
     positions: list[DashboardPositionOut]
 
 

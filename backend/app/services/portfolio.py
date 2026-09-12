@@ -25,6 +25,7 @@ from app.services.invest_types import (
 )
 from app.services.quotes import fetch_last_prices
 from app.services.sync import get_connection
+from app.services.xirr import investor_cashflows, moscow_today, xirr_percent
 
 logger = logging.getLogger("portfel.portfolio")
 
@@ -222,6 +223,8 @@ def _empty_dashboard() -> DashboardOut:
         prices_live=False,
         history_from=None,
         invested_missing=False,
+        xirr_percent=None,
+        xirr_from=None,
         positions=[],
     )
 
@@ -375,6 +378,14 @@ async def build_dashboard(session: AsyncSession, user: User, *, live: bool = Tru
     if invested != 0:
         profit_percent = money_str(profit / invested * Decimal("100"))
 
+    today = moscow_today()
+    annual = xirr_percent(operations, prices, today, total_value, to_rub)
+    xirr_from = None
+    if annual is not None:
+        flows = investor_cashflows(operations, prices, today, total_value, to_rub)
+        dates = [day for day, amount in flows[:-1] if amount != 0]
+        xirr_from = min(dates) if dates else None
+
     return DashboardOut(
         value=money_str(total_value),
         invested=money_str(invested),
@@ -385,6 +396,8 @@ async def build_dashboard(session: AsyncSession, user: User, *, live: bool = Tru
         prices_live=prices_live,
         history_from=connection.history_from,
         invested_missing=invested == 0 and total_value > 0,
+        xirr_percent=money_str(annual) if annual is not None else None,
+        xirr_from=xirr_from,
         positions=rows,
     )
 

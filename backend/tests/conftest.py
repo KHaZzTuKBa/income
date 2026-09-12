@@ -19,6 +19,18 @@ from app.main import app
 from app.seed import seed_user
 
 
+@pytest.fixture(autouse=True)
+def _stub_history_market(monkeypatch) -> None:
+    async def no_candles(*_args, **_kwargs):
+        return []
+
+    async def no_imoex(*_args, **_kwargs):
+        return {}
+
+    monkeypatch.setattr("app.services.history.fetch_daily_candles", no_candles)
+    monkeypatch.setattr("app.services.history.fetch_imoex", no_imoex)
+
+
 @pytest.fixture
 async def client() -> AsyncClient:
     engine = create_async_engine(

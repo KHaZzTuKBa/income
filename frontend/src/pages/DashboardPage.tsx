@@ -2,6 +2,8 @@ import { useEffect } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import { getAccounts, getConnection, getDashboard, getOperations, startSync } from "../api/invest";
+import { getHistory } from "../api/history";
+import { PortfolioChart } from "../components/PortfolioChart";
 
 function formatMoney(value: string | undefined): string {
   const parsed = Number(value);
@@ -76,6 +78,12 @@ export function DashboardPage() {
     queryFn: getOperations,
     enabled: configured,
   });
+  const history = useQuery({
+    queryKey: ["history"],
+    queryFn: () => getHistory(false),
+    enabled: configured,
+    refetchInterval: (query) => (query.state.data?.building ? 5000 : 60_000),
+  });
 
   const syncMutation = useMutation({
     mutationFn: startSync,
@@ -84,6 +92,7 @@ export function DashboardPage() {
       await queryClient.invalidateQueries({ queryKey: ["accounts"] });
       await queryClient.invalidateQueries({ queryKey: ["dashboard"] });
       await queryClient.invalidateQueries({ queryKey: ["operations"] });
+      await queryClient.invalidateQueries({ queryKey: ["history"] });
       await queryClient.invalidateQueries({ queryKey: ["sync-runs"] });
     },
   });
@@ -95,6 +104,7 @@ export function DashboardPage() {
       void queryClient.invalidateQueries({ queryKey: ["accounts"] });
       void queryClient.invalidateQueries({ queryKey: ["dashboard"] });
       void queryClient.invalidateQueries({ queryKey: ["operations"] });
+      void queryClient.invalidateQueries({ queryKey: ["history"] });
     }
   }, [connection.data?.last_sync_at, connection.data?.status, queryClient]);
 
@@ -147,7 +157,7 @@ export function DashboardPage() {
         </p>
       ) : null}
 
-      <div className="grid gap-4 sm:grid-cols-3">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <article className="border border-line bg-paper-2/40 p-5">
           <p className="text-xs uppercase tracking-[0.16em] text-moss">Стоимость</p>
           <p className="mt-3 font-display text-3xl">
@@ -179,7 +189,29 @@ export function DashboardPage() {
               : "Стоимость − вложено"}
           </p>
         </article>
+        <article className="border border-line bg-paper-2/40 p-5">
+          <p className="text-xs uppercase tracking-[0.16em] text-moss">XIRR</p>
+          <p className={`mt-3 font-display text-3xl ${configured && snapshot?.xirr_percent ? moneyClass(snapshot.xirr_percent) : ""}`}>
+            {configured && snapshot?.xirr_percent != null
+              ? `${Number(snapshot.xirr_percent) > 0 ? "+" : ""}${formatNumber(snapshot.xirr_percent)}%`
+              : "—"}
+          </p>
+          <p className="mt-2 text-xs text-moss">
+            {configured && snapshot?.xirr_from
+              ? `годовых с ${snapshot.xirr_from}`
+              : "По вводам, выводам и текущей стоимости"}
+          </p>
+        </article>
       </div>
+
+      {configured ? (
+        <div>
+          <h2 className="font-display text-2xl">Стоимость во времени</h2>
+          <div className="mt-3 border border-line bg-paper-2/30 p-4">
+            <PortfolioChart points={history.data?.points ?? []} building={history.data?.building === true} />
+          </div>
+        </div>
+      ) : null}
 
       {configured ? (
         <p className="text-sm text-moss">

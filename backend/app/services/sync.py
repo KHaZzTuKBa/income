@@ -68,10 +68,18 @@ async def run_sync_job(connection_id: int, run_id: int) -> None:
         except (InvestClientError, CryptoError) as exc:
             await session.rollback()
             await _fail_run(connection_id, run_id, str(exc))
+            return
         except Exception:
             logger.exception("Sync failed")
             await session.rollback()
             await _fail_run(connection_id, run_id, "Синхронизация оборвалась. Подробности в логе сервера.")
+            return
+    try:
+        from app.services.history import rebuild_history
+
+        await rebuild_history(connection_id, force=True)
+    except Exception:
+        logger.exception("History rebuild failed id=%s", connection_id)
 
 
 async def run_scheduled_sync() -> None:

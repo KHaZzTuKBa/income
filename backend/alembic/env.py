@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import async_engine_from_config
 
 from app.config import settings
 from app.db import Base
-from app.models import Accrual, Category, HoldingCategory, User  # noqa: F401
+from app.models import Accrual, Category, HoldingCategory, PortfolioSnapshot, PriceDaily, User  # noqa: F401
 from app.models.invest import (  # noqa: F401
     Account,
     BrokerConnection,

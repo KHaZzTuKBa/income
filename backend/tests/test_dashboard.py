@@ -156,6 +156,7 @@ async def test_dashboard_empty(auth_client: AsyncClient) -> None:
     assert body["profit"] == "0.00"
     assert body["positions"] == []
     assert body["invested_missing"] is False
+    assert body["xirr_percent"] is None
 
 
 async def test_dashboard_value_invested_profit(auth_client: AsyncClient, monkeypatch) -> None:
@@ -175,6 +176,8 @@ async def test_dashboard_value_invested_profit(auth_client: AsyncClient, monkeyp
     assert body["cash"] == "1500.00"
     assert body["prices_live"] is False
     assert body["invested_missing"] is False
+    assert body["xirr_percent"] is not None
+    assert Decimal(body["xirr_percent"]) < 0
 
     by_ticker = {item["ticker"]: item for item in body["positions"]}
     sber = by_ticker["SBER"]
