@@ -1,14 +1,16 @@
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from decimal import Decimal
+from zoneinfo import ZoneInfo
 
 from app.services.invest_types import (
     ACCOUNT_STATUS_MAP,
     ACCOUNT_TYPE_MAP,
     CURRENCY_FIGI,
     AccountDTO,
+    ForecastDTO,
     InstrumentDTO,
     InvestClientError,
     InvestPayload,
@@ -22,6 +24,7 @@ from app.services.invest_types import (
 )
 
 logger = logging.getLogger("portfel.invest")
+MOSCOW = ZoneInfo("Europe/Moscow")
 
 HISTORY_FROM = datetime(2015, 1, 1, tzinfo=timezone.utc)
 MAX_OPERATIONS = 200_000
@@ -69,6 +72,102 @@ async def fetch_instrument_nominals(token: str, figis: list[str]) -> dict[str, t
             except Exception:
                 logger.warning("Nominal not found for figi=%s", figi)
     return result
+
+
+async def fetch_income_forecasts(
+    token: str,
+    instruments: list[tuple[str, str]],
+    start: datetime,
+    end: datetime,
+) -> list[ForecastDTO]:
+    try:
+        from t_tech.invest import AsyncClient
+    except ImportError:
+        try:
+            from tinkoff.invest import AsyncClient
+        except ImportError as exc:
+            raise InvestClientError("Не установлен пакет t-tech-investments") from exc
+
+    result: list[ForecastDTO] = []
+    async with AsyncClient(token) as client:
+        for figi, instrument_type in instruments:
+            if not figi:
+                continue
+            kind = "coupon" if (instrument_type or "").lower() in {"bond", "bonds"} else "dividend"
+            try:
+                if kind == "coupon":
+                    result.extend(await _load_coupons(client, figi, start, end))
+                else:
+                    result.extend(await _load_dividends(client, figi, start, end))
+            except Exception:
+                logger.warning("Income forecast failed for figi=%s", figi)
+    return result
+
+
+async def _load_dividends(client, figi: str, start: datetime, end: datetime) -> list[ForecastDTO]:
+    response = await _call_income(client.instruments.get_dividends, figi, start, end)
+    items = getattr(response, "dividends", None) or []
+    result: list[ForecastDTO] = []
+    for item in items:
+        event_date = _event_date(
+            getattr(item, "payment_date", None),
+            getattr(item, "record_date", None),
+            getattr(item, "last_buy_date", None),
+        )
+        if event_date is None:
+            continue
+        money = getattr(item, "dividend_net", None)
+        result.append(
+            ForecastDTO(
+                figi=figi,
+                kind="dividend",
+                status="declared",
+                event_date=event_date,
+                amount_per_unit=money_to_decimal(money),
+                currency=_currency_of(money, "RUB"),
+            )
+        )
+    return result
+
+
+async def _load_coupons(client, figi: str, start: datetime, end: datetime) -> list[ForecastDTO]:
+    response = await _call_income(client.instruments.get_bond_coupons, figi, start, end)
+    items = getattr(response, "events", None) or getattr(response, "coupons", None) or []
+    result: list[ForecastDTO] = []
+    for item in items:
+        event_date = _event_date(getattr(item, "coupon_date", None), getattr(item, "fix_date", None))
+        if event_date is None:
+            continue
+        money = getattr(item, "pay_one_bond", None)
+        result.append(
+            ForecastDTO(
+                figi=figi,
+                kind="coupon",
+                status="forecast",
+                event_date=event_date,
+                amount_per_unit=money_to_decimal(money),
+                currency=_currency_of(money, "RUB"),
+            )
+        )
+    return result
+
+
+async def _call_income(method, figi: str, start: datetime, end: datetime):
+    try:
+        return await method(figi=figi, from_=start, to=end)
+    except TypeError:
+        return await method(instrument_id=figi, from_=start, to=end)
+
+
+def _event_date(*values: object) -> date | None:
+    for value in values:
+        if value is None:
+            continue
+        try:
+            return to_utc(value).astimezone(MOSCOW).date()
+        except Exception:
+            continue
+    return None
 
 
 async def load_invest_data(token: str, *, accounts_only: bool = False) -> InvestPayload:

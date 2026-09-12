@@ -40,6 +40,9 @@ export function AppLayout() {
               <NavLink to="/categories" className={linkClass}>
                 Категории
               </NavLink>
+              <NavLink to="/calendar" className={linkClass}>
+                Календарь
+              </NavLink>
               <NavLink to="/settings" className={linkClass}>
                 Настройки
               </NavLink>

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from decimal import Decimal
 
 
@@ -77,6 +77,13 @@ CASHFLOW_TYPES = {
     "OPERATION_TYPE_OUTPUT_ACQUIRING",
     "OPERATION_TYPE_INP_MULTI",
     "OPERATION_TYPE_OUT_MULTI",
+}
+
+INCOME_TYPES = {
+    "OPERATION_TYPE_DIVIDEND",
+    "OPERATION_TYPE_COUPON",
+    "OPERATION_TYPE_DIVIDEND_TRANSFER",
+    "OPERATION_TYPE_DIV_EXT",
 }
 
 CURRENCY_FIGI = {
@@ -163,6 +170,16 @@ class InstrumentDTO:
     uid: str = ""
     nominal: Decimal = Decimal("0")
     nominal_currency: str = ""
+
+
+@dataclass
+class ForecastDTO:
+    figi: str
+    kind: str
+    status: str
+    event_date: date
+    amount_per_unit: Decimal
+    currency: str
 
 
 @dataclass

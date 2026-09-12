@@ -6,6 +6,7 @@ from apscheduler.triggers.cron import CronTrigger
 from sqlalchemy import text
 
 from app.db import SessionLocal
+from app.services.calendar import refresh_all_forecasts
 from app.services.portfolio import refresh_stored_prices
 from app.services.sync import run_scheduled_sync
 
@@ -29,6 +30,7 @@ async def scheduled_sync() -> None:
     try:
         logger.info("scheduled sync started")
         await run_scheduled_sync()
+        await refresh_all_forecasts()
         logger.info("scheduled sync finished")
     except Exception:
         logger.exception("scheduled sync failed")
