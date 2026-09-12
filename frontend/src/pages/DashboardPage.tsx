@@ -2,8 +2,7 @@ import { useEffect } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import { getAccounts, getConnection, getDashboard, getOperations, startSync } from "../api/invest";
-import { getHistory } from "../api/history";
-import { PortfolioChart } from "../components/PortfolioChart";
+import { PortfolioCharts } from "../components/PortfolioChart";
 
 function formatMoney(value: string | undefined): string {
   const parsed = Number(value);
@@ -78,13 +77,6 @@ export function DashboardPage() {
     queryFn: getOperations,
     enabled: configured,
   });
-  const history = useQuery({
-    queryKey: ["history"],
-    queryFn: () => getHistory(false),
-    enabled: configured,
-    refetchInterval: (query) => (query.state.data?.building ? 5000 : 60_000),
-  });
-
   const syncMutation = useMutation({
     mutationFn: startSync,
     onSuccess: async () => {
@@ -204,14 +196,7 @@ export function DashboardPage() {
         </article>
       </div>
 
-      {configured ? (
-        <div>
-          <h2 className="font-display text-2xl">Стоимость во времени</h2>
-          <div className="mt-3 border border-line bg-paper-2/30 p-4">
-            <PortfolioChart points={history.data?.points ?? []} building={history.data?.building === true} />
-          </div>
-        </div>
-      ) : null}
+      {configured ? <PortfolioCharts enabled={configured} /> : null}
 
       {configured ? (
         <p className="text-sm text-moss">

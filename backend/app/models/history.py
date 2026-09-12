@@ -36,3 +36,19 @@ class PortfolioSnapshot(Base):
     securities_rub: Mapped[Decimal] = mapped_column(Numeric(20, 8), default=Decimal("0"))
     invested_rub: Mapped[Decimal] = mapped_column(Numeric(20, 8), default=Decimal("0"))
     imoex_close: Mapped[Decimal | None] = mapped_column(Numeric(20, 8), nullable=True)
+
+
+class AccountSnapshot(Base):
+    __tablename__ = "account_snapshots"
+    __table_args__ = (UniqueConstraint("account_id", "day", name="uq_account_snapshots_account_day"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    account_id: Mapped[int] = mapped_column(
+        ForeignKey("accounts.id", ondelete="CASCADE"),
+        index=True,
+    )
+    day: Mapped[date] = mapped_column(Date, index=True)
+    value_rub: Mapped[Decimal] = mapped_column(Numeric(20, 8), default=Decimal("0"))
+    cash_rub: Mapped[Decimal] = mapped_column(Numeric(20, 8), default=Decimal("0"))
+    securities_rub: Mapped[Decimal] = mapped_column(Numeric(20, 8), default=Decimal("0"))
+    invested_rub: Mapped[Decimal] = mapped_column(Numeric(20, 8), default=Decimal("0"))

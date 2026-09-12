@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import calendar
 import logging
 import os
 from collections import defaultdict
@@ -13,8 +14,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app import db as db_module
 from app.models import Account, BrokerConnection, Instrument, Operation, Position
-from app.models.history import PortfolioSnapshot, PriceDaily
-from app.schemas.history import HistoryOut, HistoryPointOut
+from app.models.history import AccountSnapshot, PortfolioSnapshot, PriceDaily
+from app.schemas.history import HistoryGranularity, HistoryOut, HistoryPointOut, HistorySeriesOut
 from app.services.crypto import CryptoError, decrypt_secret
 from app.services.invest_types import (
     BUY_TYPES,
@@ -41,6 +42,8 @@ ZERO = Decimal("0")
 QTY_EPS = Decimal("0.00000001")
 IMOEX = "IMOEX"
 CANDLE_TIMEOUT = 30
+CUSTOM_DAY_MAX = 45
+Holding = tuple[Decimal, Decimal, str]
 
 
 def compute_snapshots(
@@ -50,36 +53,141 @@ def compute_snapshots(
     imoex: dict[date, Decimal],
     start: date,
     end: date,
+    close_currency: dict[str, str] | None = None,
 ) -> list[dict]:
+    return compute_all_snapshots(
+        operations,
+        instruments,
+        closes,
+        imoex,
+        start,
+        end,
+        close_currency=close_currency,
+    )[None]
+
+
+def compute_all_snapshots(
+    operations: list[Any],
+    instruments: dict[str, Instrument],
+    closes: dict[str, dict[date, Decimal]],
+    imoex: dict[date, Decimal],
+    start: date,
+    end: date,
+    close_currency: dict[str, str] | None = None,
+    extra_account_ids: list[int] | None = None,
+) -> dict[int | None, list[dict]]:
     ordered = sorted(
         [item for item in operations if _executed(item)],
         key=lambda item: (getattr(item, "occurred_at"), getattr(item, "id", 0) or 0),
     )
+    account_ids = sorted(
+        {
+            int(getattr(item, "account_id", 0) or 0)
+            for item in ordered
+            if getattr(item, "account_id", None)
+        }
+        | {int(item) for item in extra_account_ids or [] if item}
+    )
+    price_ccy = close_currency or {}
     index = 0
-    holdings: dict[tuple[int, str], tuple[Decimal, Decimal]] = {}
-    cash_pay: dict[str, Decimal] = defaultdict(lambda: ZERO)
-    snapshots: list[dict] = []
-    invested = ZERO
+    holdings: dict[tuple[int, str], Holding] = {}
+    cash_pay: dict[tuple[int, str], Decimal] = defaultdict(lambda: ZERO)
+    invested_by: dict[int, Decimal] = defaultdict(lambda: ZERO)
+    series: dict[int | None, list[dict]] = {None: []}
+    for account_id in account_ids:
+        series[account_id] = []
     day = start
     while day <= end:
         while index < len(ordered) and moscow_day(ordered[index].occurred_at) <= day:
-            invested += _apply_operation(ordered[index], holdings, cash_pay, closes, day)
+            account_id, invested = _apply_operation(ordered[index], holdings, cash_pay, closes, day)
+            if account_id:
+                invested_by[account_id] += invested
             index += 1
         fx_prices = _fx_prices(closes, day)
-        cash = _cash_rub(cash_pay, holdings, instruments, fx_prices)
-        securities = _securities_rub(holdings, instruments, closes, day, fx_prices)
-        snapshots.append(
+        total_cash = ZERO
+        total_sec = ZERO
+        total_invested = ZERO
+        for account_id in account_ids:
+            cash = _cash_rub(cash_pay, holdings, instruments, fx_prices, account_id)
+            securities = _securities_rub(
+                holdings, instruments, closes, price_ccy, day, fx_prices, account_id
+            )
+            invested = invested_by[account_id]
+            series[account_id].append(
+                {
+                    "day": day,
+                    "value": cash + securities,
+                    "cash": cash,
+                    "securities": securities,
+                    "invested": invested,
+                    "imoex": None,
+                }
+            )
+            total_cash += cash
+            total_sec += securities
+            total_invested += invested
+        series[None].append(
             {
                 "day": day,
-                "value": cash + securities,
-                "cash": cash,
-                "securities": securities,
-                "invested": invested,
+                "value": total_cash + total_sec,
+                "cash": total_cash,
+                "securities": total_sec,
+                "invested": total_invested,
                 "imoex": imoex.get(day),
             }
         )
         day += timedelta(days=1)
-    return snapshots
+    return series
+
+
+def aggregate_points(points: list[dict], granularity: HistoryGranularity) -> list[dict]:
+    """Месячная точка — стоимость на последний день месяца, не сумма дней."""
+    if granularity == "day" or not points:
+        return points
+    buckets: dict[tuple[int, int], dict] = {}
+    order: list[tuple[int, int]] = []
+    for item in points:
+        day: date = item["day"]
+        key = (day.year, day.month)
+        if key not in buckets:
+            order.append(key)
+        buckets[key] = item
+    return [buckets[key] for key in order]
+
+
+def resolve_history_window(
+    *,
+    period: str,
+    year: int | None,
+    from_day: date | None,
+    to_day: date | None,
+    today: date,
+    first_day: date | None,
+) -> tuple[date, date, HistoryGranularity]:
+    if period == "custom" and from_day and to_day:
+        start, end = (from_day, to_day) if from_day <= to_day else (to_day, from_day)
+        granularity: HistoryGranularity = "day" if (end - start).days <= CUSTOM_DAY_MAX else "month"
+        return start, end, granularity
+    if period == "week":
+        return today - timedelta(days=6), today, "day"
+    if period == "month":
+        return today - timedelta(days=29), today, "day"
+    if period == "year":
+        selected = year or today.year
+        return date(selected, 1, 1), min(date(selected, 12, 31), today), "month"
+    if period == "6m":
+        return shift_months(today, -6), today, "month"
+    if period == "1y":
+        return shift_months(today, -12), today, "month"
+    start = first_day or today
+    return start, today, "month"
+
+
+def shift_months(day: date, months: int) -> date:
+    month = day.month - 1 + months
+    year = day.year + month // 12
+    month = month % 12 + 1
+    return date(year, month, min(day.day, calendar.monthrange(year, month)[1]))
 
 
 async def rebuild_history(connection_id: int, *, force: bool = False) -> None:
@@ -94,39 +202,128 @@ async def rebuild_history(connection_id: int, *, force: bool = False) -> None:
                     PortfolioSnapshot.connection_id == connection.id
                 )
             )
-            if last == today:
+            accounts_ready = await account_snapshots_exist(session, connection.id)
+            if last == today and accounts_ready:
                 return
         await _rebuild(session, connection, today)
 
 
-async def load_history(session: AsyncSession, connection: BrokerConnection | None) -> HistoryOut:
-    if connection is None:
-        return HistoryOut(building=False, points=[], xirr_percent=None, xirr_from=None)
-    result = await session.execute(
-        select(PortfolioSnapshot)
-        .where(PortfolioSnapshot.connection_id == connection.id)
-        .order_by(PortfolioSnapshot.day)
-    )
-    rows = list(result.scalars())
-    points = [
-        HistoryPointOut(
-            day=item.day,
-            value=money_str(item.value_rub),
-            cash=money_str(item.cash_rub),
-            securities=money_str(item.securities_rub),
-            invested=money_str(item.invested_rub),
-            imoex=money_str(item.imoex_close) if item.imoex_close is not None else None,
-        )
-        for item in rows
-    ]
-    last = rows[-1].day if rows else None
-    building = last is None
-    return HistoryOut(
-        building=building,
-        points=points,
+async def load_history(
+    session: AsyncSession,
+    connection: BrokerConnection | None,
+    *,
+    period: str = "all",
+    year: int | None = None,
+    from_day: date | None = None,
+    to_day: date | None = None,
+) -> HistoryOut:
+    empty = HistoryOut(
+        building=False,
+        period=period,
+        points=[],
+        series=[],
         xirr_percent=None,
         xirr_from=None,
     )
+    if connection is None:
+        return empty
+    accounts_result = await session.execute(
+        select(Account).where(Account.connection_id == connection.id).order_by(Account.id)
+    )
+    accounts = list(accounts_result.scalars())
+    names = {item.id: (item.name or item.broker_account_id) for item in accounts}
+
+    total_rows = list(
+        (
+            await session.execute(
+                select(PortfolioSnapshot)
+                .where(PortfolioSnapshot.connection_id == connection.id)
+                .order_by(PortfolioSnapshot.day)
+            )
+        ).scalars()
+    )
+    account_rows: dict[int, list[AccountSnapshot]] = {item.id: [] for item in accounts}
+    if accounts:
+        acc_result = await session.execute(
+            select(AccountSnapshot)
+            .where(AccountSnapshot.account_id.in_([item.id for item in accounts]))
+            .order_by(AccountSnapshot.day)
+        )
+        for row in acc_result.scalars():
+            account_rows.setdefault(row.account_id, []).append(row)
+
+    years = sorted({row.day.year for row in total_rows})
+    first_day = total_rows[0].day if total_rows else None
+    last_day = total_rows[-1].day if total_rows else None
+    start, end, granularity = resolve_history_window(
+        period=period,
+        year=year,
+        from_day=from_day,
+        to_day=to_day,
+        today=moscow_today(),
+        first_day=first_day,
+    )
+    building = last_day is None
+
+    def to_points(rows: list, with_imoex: bool) -> list[HistoryPointOut]:
+        daily = [
+            {
+                "day": item.day,
+                "value": item.value_rub,
+                "cash": item.cash_rub,
+                "securities": item.securities_rub,
+                "invested": item.invested_rub,
+                "imoex": item.imoex_close if with_imoex else None,
+            }
+            for item in rows
+            if start <= item.day <= end
+        ]
+        return [_point_out(item, with_imoex) for item in aggregate_points(daily, granularity)]
+
+    points = to_points(total_rows, True)
+    series = [
+        HistorySeriesOut(account_id=None, account_name="Все счета", points=points),
+        *[
+            HistorySeriesOut(
+                account_id=account.id,
+                account_name=names.get(account.id, account.broker_account_id),
+                points=to_points(account_rows.get(account.id, []), False),
+            )
+            for account in accounts
+        ],
+    ]
+    return HistoryOut(
+        building=building,
+        period=period,
+        granularity=granularity,
+        from_day=start if total_rows else None,
+        to_day=end if total_rows else None,
+        years=years,
+        points=points,
+        series=series,
+        xirr_percent=None,
+        xirr_from=None,
+    )
+
+
+def _point_out(item: dict, with_imoex: bool) -> HistoryPointOut:
+    imoex = item.get("imoex") if with_imoex else None
+    return HistoryPointOut(
+        day=item["day"],
+        value=money_str(item["value"]),
+        cash=money_str(item["cash"]),
+        securities=money_str(item["securities"]),
+        invested=money_str(item["invested"]),
+        imoex=money_str(imoex) if imoex is not None else None,
+    )
+
+
+async def account_snapshots_exist(session: AsyncSession, connection_id: int) -> bool:
+    account_ids = select(Account.id).where(Account.connection_id == connection_id)
+    count = await session.scalar(
+        select(func.count()).select_from(AccountSnapshot).where(AccountSnapshot.account_id.in_(account_ids))
+    )
+    return int(count or 0) > 0
 
 
 async def _rebuild(session: AsyncSession, connection: BrokerConnection, today: date) -> None:
@@ -137,10 +334,13 @@ async def _rebuild(session: AsyncSession, connection: BrokerConnection, today: d
         .order_by(Operation.occurred_at, Operation.id)
     )
     operations = list(ops_result.scalars())
+    account_ids = list(
+        (
+            await session.execute(select(Account.id).where(Account.connection_id == connection.id))
+        ).scalars()
+    )
     if not operations:
-        await session.execute(
-            delete(PortfolioSnapshot).where(PortfolioSnapshot.connection_id == connection.id)
-        )
+        await _clear_snapshots(session, connection.id, account_ids)
         await session.commit()
         return
 
@@ -197,24 +397,27 @@ async def _rebuild(session: AsyncSession, connection: BrokerConnection, today: d
         fetched_any = True
         await _store_prices(session, IMOEX, sorted(imoex_raw.items()), "RUB", "moex")
 
-    stored = await _load_prices(session, [*candle_figis, IMOEX], start, today)
+    stored, close_currency = await _load_prices(session, [*candle_figis, IMOEX], start, today)
     if not fetched_any and not stored:
-        await _snapshot_today_only(session, connection, positions, instruments, today)
+        await _snapshot_today_only(session, connection, positions, instruments, today, account_ids)
         return
 
     closes = {figi: _ffill(series, start, today) for figi, series in stored.items() if figi != IMOEX}
     imoex = _ffill(stored.get(IMOEX, {}), start, today)
-    rows = compute_snapshots(operations, instruments, closes, imoex, start, today)
-    pin = _today_totals(positions, instruments, closes, today)
-    if pin is not None and rows:
-        rows[-1]["value"] = pin[0]
-        rows[-1]["cash"] = pin[1]
-        rows[-1]["securities"] = pin[2]
-
-    await session.execute(
-        delete(PortfolioSnapshot).where(PortfolioSnapshot.connection_id == connection.id)
+    series = compute_all_snapshots(
+        operations,
+        instruments,
+        closes,
+        imoex,
+        start,
+        today,
+        close_currency=close_currency,
+        extra_account_ids=account_ids,
     )
-    for item in rows:
+    _pin_last(series, positions, instruments, closes, today)
+
+    await _clear_snapshots(session, connection.id, account_ids)
+    for item in series.get(None, []):
         session.add(
             PortfolioSnapshot(
                 connection_id=connection.id,
@@ -226,8 +429,28 @@ async def _rebuild(session: AsyncSession, connection: BrokerConnection, today: d
                 imoex_close=item["imoex"],
             )
         )
+    for account_id, rows in series.items():
+        if account_id is None:
+            continue
+        for item in rows:
+            session.add(
+                AccountSnapshot(
+                    account_id=account_id,
+                    day=item["day"],
+                    value_rub=item["value"],
+                    cash_rub=item["cash"],
+                    securities_rub=item["securities"],
+                    invested_rub=item["invested"],
+                )
+            )
     await session.commit()
-    logger.info("History rebuilt id=%s days=%s", connection.id, len(rows))
+    logger.info("History rebuilt id=%s days=%s accounts=%s", connection.id, len(series.get(None, [])), len(account_ids))
+
+
+async def _clear_snapshots(session: AsyncSession, connection_id: int, account_ids: list[int]) -> None:
+    await session.execute(delete(PortfolioSnapshot).where(PortfolioSnapshot.connection_id == connection_id))
+    if account_ids:
+        await session.execute(delete(AccountSnapshot).where(AccountSnapshot.account_id.in_(account_ids)))
 
 
 async def _snapshot_today_only(
@@ -236,25 +459,67 @@ async def _snapshot_today_only(
     positions: list[Position],
     instruments: dict[str, Instrument],
     today: date,
+    account_ids: list[int],
 ) -> None:
     pin = _today_totals(positions, instruments, {}, today)
-    if pin is None:
-        return
-    await session.execute(
-        delete(PortfolioSnapshot).where(PortfolioSnapshot.connection_id == connection.id)
-    )
-    session.add(
-        PortfolioSnapshot(
-            connection_id=connection.id,
-            day=today,
-            value_rub=pin[0],
-            cash_rub=pin[1],
-            securities_rub=pin[2],
-            invested_rub=ZERO,
-            imoex_close=None,
+    await _clear_snapshots(session, connection.id, account_ids)
+    if pin is not None:
+        session.add(
+            PortfolioSnapshot(
+                connection_id=connection.id,
+                day=today,
+                value_rub=pin[0],
+                cash_rub=pin[1],
+                securities_rub=pin[2],
+                invested_rub=ZERO,
+                imoex_close=None,
+            )
         )
-    )
+    by_account: dict[int, list[Position]] = defaultdict(list)
+    for item in positions:
+        by_account[item.account_id].append(item)
+    for account_id in account_ids:
+        acc_pin = _today_totals(by_account.get(account_id, []), instruments, {}, today)
+        if acc_pin is None:
+            acc_pin = (ZERO, ZERO, ZERO)
+        session.add(
+            AccountSnapshot(
+                account_id=account_id,
+                day=today,
+                value_rub=acc_pin[0],
+                cash_rub=acc_pin[1],
+                securities_rub=acc_pin[2],
+                invested_rub=ZERO,
+            )
+        )
     await session.commit()
+
+
+def _pin_last(
+    series: dict[int | None, list[dict]],
+    positions: list[Position],
+    instruments: dict[str, Instrument],
+    closes: dict[str, dict[date, Decimal]],
+    today: date,
+) -> None:
+    pin = _today_totals(positions, instruments, closes, today)
+    total_rows = series.get(None) or []
+    if pin is not None and total_rows:
+        total_rows[-1]["value"] = pin[0]
+        total_rows[-1]["cash"] = pin[1]
+        total_rows[-1]["securities"] = pin[2]
+    by_account: dict[int, list[Position]] = defaultdict(list)
+    for item in positions:
+        by_account[item.account_id].append(item)
+    for account_id, rows in series.items():
+        if account_id is None or not rows:
+            continue
+        acc_pin = _today_totals(by_account.get(account_id, []), instruments, closes, today)
+        if acc_pin is None:
+            continue
+        rows[-1]["value"] = acc_pin[0]
+        rows[-1]["cash"] = acc_pin[1]
+        rows[-1]["securities"] = acc_pin[2]
 
 
 def _today_totals(
@@ -317,15 +582,16 @@ def _today_totals(
 
 def _apply_operation(
     operation: Any,
-    holdings: dict[tuple[int, str], tuple[Decimal, Decimal]],
-    cash_pay: dict[str, Decimal],
+    holdings: dict[tuple[int, str], Holding],
+    cash_pay: dict[tuple[int, str], Decimal],
     closes: dict[str, dict[date, Decimal]],
     day: date,
-) -> Decimal:
-    currency = getattr(operation, "currency", None) or "RUB"
+) -> tuple[int, Decimal]:
+    currency = (getattr(operation, "currency", None) or "RUB").upper()
+    account_id = int(getattr(operation, "account_id", 0) or 0)
     payment = Decimal(str(getattr(operation, "payment", 0) or 0))
     commission = Decimal(str(getattr(operation, "commission", 0) or 0))
-    cash_pay[currency] += payment + commission
+    cash_pay[(account_id, currency)] += payment + commission
     invested = ZERO
     if (getattr(operation, "operation_type", "") or "") in CASHFLOW_TYPES:
         invested = to_rub(payment, currency, _fx_prices(closes, day))
@@ -333,8 +599,8 @@ def _apply_operation(
     figi = getattr(operation, "figi", "") or ""
     op_type = getattr(operation, "operation_type", "") or ""
     if figi and op_type in BUY_TYPES | SELL_TYPES:
-        key = (int(operation.account_id), str(figi))
-        qty, avg = holdings.get(key, (ZERO, ZERO))
+        key = (account_id, str(figi))
+        qty, avg, avg_ccy = holdings.get(key, (ZERO, ZERO, currency))
         add_qty = Decimal(str(getattr(operation, "quantity", 0) or 0))
         if op_type in BUY_TYPES and add_qty > 0:
             price = Decimal(str(getattr(operation, "price", 0) or 0))
@@ -342,23 +608,28 @@ def _apply_operation(
                 price = abs(payment) / add_qty if add_qty else ZERO
             new_qty = qty + add_qty
             avg = (qty * avg + add_qty * price) / new_qty if new_qty else ZERO
-            holdings[key] = (new_qty, avg)
+            holdings[key] = (new_qty, avg, currency or avg_ccy)
         elif op_type in SELL_TYPES:
             qty = qty - add_qty
-            holdings[key] = (ZERO, ZERO) if qty <= QTY_EPS else (qty, avg)
-    return invested
+            holdings[key] = (ZERO, ZERO, avg_ccy) if qty <= QTY_EPS else (qty, avg, avg_ccy)
+    return account_id, invested
 
 
 def _cash_rub(
-    cash_pay: dict[str, Decimal],
-    holdings: dict[tuple[int, str], tuple[Decimal, Decimal]],
+    cash_pay: dict[tuple[int, str], Decimal],
+    holdings: dict[tuple[int, str], Holding],
     instruments: dict[str, Instrument],
     fx_prices: dict[str, Decimal],
+    account_id: int | None = None,
 ) -> Decimal:
     totals: dict[str, Decimal] = defaultdict(lambda: ZERO)
-    for currency, amount in cash_pay.items():
+    for (acc, currency), amount in cash_pay.items():
+        if account_id is not None and acc != account_id:
+            continue
         totals[currency.upper()] += amount
-    for (_account_id, figi), (qty, _avg) in holdings.items():
+    for (acc, figi), (qty, _avg, _ccy) in holdings.items():
+        if account_id is not None and acc != account_id:
+            continue
         if qty <= 0:
             continue
         instrument = instruments.get(figi)
@@ -378,31 +649,34 @@ def _cash_rub(
 
 
 def _securities_rub(
-    holdings: dict[tuple[int, str], tuple[Decimal, Decimal]],
+    holdings: dict[tuple[int, str], Holding],
     instruments: dict[str, Instrument],
     closes: dict[str, dict[date, Decimal]],
+    close_currency: dict[str, str],
     day: date,
     fx_prices: dict[str, Decimal],
+    account_id: int | None = None,
 ) -> Decimal:
-    by_figi: dict[str, tuple[Decimal, Decimal]] = {}
-    for (_account_id, figi), (qty, avg) in holdings.items():
+    by_figi: dict[str, tuple[Decimal, Decimal, str]] = {}
+    for (acc, figi), (qty, avg, avg_ccy) in holdings.items():
+        if account_id is not None and acc != account_id:
+            continue
         if qty <= 0 or _is_cash_figi(figi, instruments.get(figi)):
             continue
-        prev_qty, prev_avg = by_figi.get(figi, (ZERO, ZERO))
+        prev_qty, prev_avg, prev_ccy = by_figi.get(figi, (ZERO, ZERO, avg_ccy))
         new_qty = prev_qty + qty
         avg_price = (prev_qty * prev_avg + qty * avg) / new_qty if new_qty else ZERO
-        by_figi[figi] = (new_qty, avg_price)
+        by_figi[figi] = (new_qty, avg_price, avg_ccy or prev_ccy)
 
     total = ZERO
-    for figi, (qty, avg) in by_figi.items():
+    for figi, (qty, avg, avg_ccy) in by_figi.items():
         instrument = instruments.get(figi)
         instrument_type = instrument.instrument_type if instrument else ""
-        raw = (closes.get(figi) or {}).get(day, avg)
-        if raw <= 0:
-            raw = avg
+        raw, currency = _quote_for_day(
+            figi, avg, avg_ccy, instrument, closes, close_currency, day
+        )
         stored_nominal = instrument.nominal if instrument else ZERO
         stored_ccy = (instrument.nominal_currency if instrument else "") or ""
-        currency = (instrument.currency if instrument else "") or "RUB"
         if is_bond(instrument_type) and raw <= Decimal("200"):
             nominal, nominal_ccy = resolve_bond_nominal(
                 stored_nominal=stored_nominal or ZERO,
@@ -414,6 +688,31 @@ def _securities_rub(
             currency = nominal_ccy or currency
         total += to_rub(qty * raw, currency, fx_prices)
     return total
+
+
+def _quote_for_day(
+    figi: str,
+    avg: Decimal,
+    avg_ccy: str,
+    instrument: Instrument | None,
+    closes: dict[str, dict[date, Decimal]],
+    close_currency: dict[str, str],
+    day: date,
+) -> tuple[Decimal, str]:
+    series = closes.get(figi) or {}
+    raw = series.get(day, ZERO)
+    trade_ccy = (avg_ccy or "RUB").upper()
+    inst_ccy = (
+        close_currency.get(figi) or (instrument.currency if instrument else "") or "RUB"
+    ).upper()
+    if raw <= 0:
+        return (avg, trade_ccy) if avg > 0 else (ZERO, inst_ccy)
+    if avg <= 0 or trade_ccy == inst_ccy:
+        return raw, inst_ccy
+    ratio = raw / avg
+    if Decimal("0.25") <= ratio <= Decimal("4"):
+        return raw, trade_ccy
+    return raw, inst_ccy
 
 
 def _fx_prices(closes: dict[str, dict[date, Decimal]], day: date) -> dict[str, Decimal]:
@@ -484,10 +783,10 @@ async def _store_prices(
 
 async def _load_prices(
     session: AsyncSession, figis: list[str], start: date, end: date
-) -> dict[str, dict[date, Decimal]]:
+) -> tuple[dict[str, dict[date, Decimal]], dict[str, str]]:
     unique = [item for item in dict.fromkeys(figis) if item]
     if not unique:
-        return {}
+        return {}, {}
     result = await session.execute(
         select(PriceDaily).where(
             PriceDaily.figi.in_(unique),
@@ -496,9 +795,12 @@ async def _load_prices(
         )
     )
     stored: dict[str, dict[date, Decimal]] = defaultdict(dict)
+    currencies: dict[str, str] = {}
     for item in result.scalars():
         stored[item.figi][item.day] = item.close
-    return stored
+        if item.currency:
+            currencies[item.figi] = item.currency
+    return stored, currencies
 
 
 async def _instruments_by_figi(session: AsyncSession, figis: list[str]) -> dict[str, Instrument]:

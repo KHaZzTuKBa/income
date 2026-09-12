@@ -2,6 +2,8 @@
 
 Личный учёт брокерского счёта Т‑Инвестиций. FastAPI + React + PostgreSQL в Docker, вход одним пользователем.
 
+Для агентов и нового контекста чата: **[AGENTS.md](AGENTS.md)** — архитектура, карта файлов, метрики, как тестировать и что не ломать.
+
 ## Быстрый старт
 
 Нужен [Docker Desktop](https://www.docker.com/products/docker-desktop/).
