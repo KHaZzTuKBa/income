@@ -1,0 +1,15 @@
+fastapi>=0.115,<1
+uvicorn[standard]>=0.32,<1
+sqlalchemy[asyncio]>=2.0.36,<2.1
+asyncpg>=0.30,<1
+alembic>=1.14,<2
+pydantic-settings>=2.6,<3
+bcrypt>=4.2,<5
+itsdangerous>=2.2,<3
+apscheduler>=3.10,<4
+greenlet>=3.1
+tzdata>=2024.2
+httpx>=0.28
+pytest>=8.3
+pytest-asyncio>=0.25
+aiosqlite>=0.20
