@@ -37,6 +37,9 @@ export function AppLayout() {
               <NavLink to="/" end className={linkClass}>
                 Дашборд
               </NavLink>
+              <NavLink to="/categories" className={linkClass}>
+                Категории
+              </NavLink>
               <NavLink to="/settings" className={linkClass}>
                 Настройки
               </NavLink>
