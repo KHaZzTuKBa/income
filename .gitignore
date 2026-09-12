@@ -17,3 +17,5 @@ Thumbs.db
 .idea/
 .vscode/
 *.swp
+portfel-deploy
+portfel-deploy.pub
