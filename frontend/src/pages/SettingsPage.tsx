@@ -55,6 +55,9 @@ export function SettingsPage() {
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ["connection"] });
       await queryClient.invalidateQueries({ queryKey: ["sync-runs"] });
+      await queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+      await queryClient.invalidateQueries({ queryKey: ["accounts"] });
+      await queryClient.invalidateQueries({ queryKey: ["operations"] });
     },
   });
 

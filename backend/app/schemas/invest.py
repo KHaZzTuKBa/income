@@ -59,6 +59,40 @@ class PositionOut(BaseModel):
     current_price_currency: str
 
 
+class DashboardPositionOut(BaseModel):
+    account_id: int
+    account_name: str
+    figi: str
+    ticker: str
+    name: str
+    instrument_type: str
+    quantity: str
+    average_price: str
+    average_price_currency: str
+    current_price: str
+    current_price_currency: str
+    value: str
+    cost: str
+    pnl: str
+    pnl_percent: str | None = None
+    share: str
+    is_cash: bool
+    average_source: str
+
+
+class DashboardOut(BaseModel):
+    value: str
+    invested: str
+    profit: str
+    profit_percent: str | None = None
+    cash: str
+    prices_as_of: datetime | None = None
+    prices_live: bool = False
+    history_from: date | None = None
+    invested_missing: bool = False
+    positions: list[DashboardPositionOut]
+
+
 class OperationOut(BaseModel):
     id: int
     account_name: str

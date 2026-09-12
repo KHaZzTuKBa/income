@@ -6,6 +6,7 @@ from apscheduler.triggers.cron import CronTrigger
 from sqlalchemy import text
 
 from app.db import SessionLocal
+from app.services.portfolio import refresh_stored_prices
 from app.services.sync import run_scheduled_sync
 
 logging.basicConfig(
@@ -33,9 +34,17 @@ async def scheduled_sync() -> None:
         logger.exception("scheduled sync failed")
 
 
+async def scheduled_prices() -> None:
+    try:
+        await refresh_stored_prices()
+    except Exception:
+        logger.exception("price refresh failed")
+
+
 async def main() -> None:
     scheduler = AsyncIOScheduler(timezone="Europe/Moscow")
     scheduler.add_job(heartbeat, "interval", minutes=5, id="heartbeat")
+    scheduler.add_job(scheduled_prices, "interval", minutes=5, id="live_prices")
     scheduler.add_job(
         scheduled_sync,
         CronTrigger(hour="8,20", minute=0, timezone="Europe/Moscow"),

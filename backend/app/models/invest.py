@@ -77,6 +77,8 @@ class Instrument(Base):
     currency: Mapped[str] = mapped_column(String(8), default="RUB")
     lot: Mapped[int] = mapped_column(Integer, default=1)
     uid: Mapped[str] = mapped_column(String(64), default="")
+    nominal: Mapped[Decimal] = mapped_column(Numeric(20, 8), default=Decimal("0"))
+    nominal_currency: Mapped[str] = mapped_column(String(8), default="")
 
 
 class Operation(Base):

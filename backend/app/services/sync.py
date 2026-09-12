@@ -211,6 +211,8 @@ async def _upsert_instruments(session: AsyncSession, payload: InvestPayload) -> 
         instrument.currency = dto.currency
         instrument.lot = dto.lot
         instrument.uid = dto.uid
+        instrument.nominal = dto.nominal
+        instrument.nominal_currency = dto.nominal_currency
     await session.flush()
     return len(figis)
 

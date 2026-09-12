@@ -8,7 +8,8 @@ from sqlalchemy.orm import selectinload
 from app.api.deps import get_current_user
 from app.db import get_session
 from app.models import Account, Instrument, Operation, Position, User
-from app.schemas.invest import AccountOut, OperationOut, PositionOut
+from app.schemas.invest import AccountOut, DashboardOut, OperationOut, PositionOut
+from app.services.portfolio import build_dashboard
 from app.services.sync import get_connection
 
 router = APIRouter()
@@ -18,6 +19,14 @@ def _dec(value: Decimal | None) -> str:
     if value is None:
         return "0"
     return format(value, "f")
+
+
+@router.get("/dashboard", response_model=DashboardOut)
+async def get_dashboard(
+    user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> DashboardOut:
+    return await build_dashboard(session, user)
 
 
 @router.get("/accounts", response_model=list[AccountOut])

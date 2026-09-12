@@ -7,12 +7,15 @@ from decimal import Decimal
 from app.services.invest_types import (
     ACCOUNT_STATUS_MAP,
     ACCOUNT_TYPE_MAP,
+    CURRENCY_FIGI,
     AccountDTO,
     InstrumentDTO,
     InvestClientError,
     InvestPayload,
     OperationDTO,
     PositionDTO,
+    canonical_cash_figi,
+    currency_code_of,
     enum_name,
     money_to_decimal,
     to_utc,
@@ -42,6 +45,30 @@ def _currency_of(value: object | None, fallback: str = "RUB") -> str:
 async def ping_token(token: str) -> None:
     """Проверяет токен через GetAccounts, без полной выгрузки."""
     await load_invest_data(token, accounts_only=True)
+
+
+async def fetch_instrument_nominals(token: str, figis: list[str]) -> dict[str, tuple[Decimal, str]]:
+    try:
+        from t_tech.invest import AsyncClient, InstrumentIdType
+    except ImportError:
+        try:
+            from tinkoff.invest import AsyncClient, InstrumentIdType
+        except ImportError as exc:
+            raise InvestClientError("Не установлен пакет t-tech-investments") from exc
+
+    result: dict[str, tuple[Decimal, str]] = {}
+    unique = [figi for figi in dict.fromkeys(figis) if figi]
+    if not unique:
+        return result
+    async with AsyncClient(token) as client:
+        for figi in unique:
+            try:
+                amount, currency = await _bond_nominal(client, InstrumentIdType, figi)
+                if amount > 0:
+                    result[figi] = (amount, currency)
+            except Exception:
+                logger.warning("Nominal not found for figi=%s", figi)
+    return result
 
 
 async def load_invest_data(token: str, *, accounts_only: bool = False) -> InvestPayload:
@@ -170,20 +197,34 @@ async def _load_positions(client, account: AccountDTO, payload: InvestPayload, f
 
     portfolio = await client.operations.get_portfolio(account_id=account.broker_account_id)
     seen: set[str] = set()
+    seen_currencies: set[str] = set()
     for position in portfolio.positions:
         figi = str(getattr(position, "figi", "") or "")
         if not figi:
             continue
-        seen.add(figi)
-        figi_needed.add(figi)
+        instrument_type = str(getattr(position, "instrument_type", "") or "")
         average = getattr(position, "average_position_price", None)
         current = getattr(position, "current_price", None)
+        if instrument_type.lower() in {"currency", "currencies"}:
+            currency = currency_code_of(
+                figi=figi,
+                fallback=_currency_of(current) or _currency_of(average),
+            )
+            if currency:
+                figi = canonical_cash_figi(figi, currency)
+                if currency in seen_currencies:
+                    continue
+                seen_currencies.add(currency)
+        if figi in seen:
+            continue
+        seen.add(figi)
+        figi_needed.add(figi)
         payload.positions.append(
             PositionDTO(
                 broker_account_id=account.broker_account_id,
                 figi=figi,
                 instrument_uid=str(getattr(position, "instrument_uid", "") or ""),
-                instrument_type=str(getattr(position, "instrument_type", "") or ""),
+                instrument_type=instrument_type,
                 quantity=money_to_decimal(getattr(position, "quantity", None)),
                 average_price=money_to_decimal(average),
                 average_price_currency=_currency_of(average),
@@ -205,12 +246,16 @@ async def _load_positions(client, account: AccountDTO, payload: InvestPayload, f
     for money in getattr(raw_positions, "money", None) or []:
         amount_source = getattr(money, "available_value", None) or money
         currency = _currency_of(amount_source, str(getattr(money, "currency", "") or "").upper())
+        if not currency or currency in seen_currencies:
+            continue
         figi = _currency_figi(currency)
         if not figi or figi in seen:
             continue
         amount = money_to_decimal(amount_source)
         if amount == Decimal("0"):
             continue
+        seen.add(figi)
+        seen_currencies.add(currency)
         payload.positions.append(
             PositionDTO(
                 broker_account_id=account.broker_account_id,
@@ -229,14 +274,22 @@ async def _load_positions(client, account: AccountDTO, payload: InvestPayload, f
 
 
 def _currency_figi(currency: str) -> str:
-    mapping = {
-        "RUB": "RUB000UTSTOM",
-        "USD": "BBG0013HGFT4",
-        "EUR": "BBG0013HJJ31",
-        "CNY": "BBG0013HRTL0",
-        "GBP": "BBG0013HQ5F0",
-    }
-    return mapping.get(currency, "")
+    return CURRENCY_FIGI.get((currency or "").upper(), "")
+
+
+def _nominal_from(instrument) -> tuple[Decimal, str]:
+    nominal = getattr(instrument, "nominal", None) or getattr(instrument, "initial_nominal", None)
+    amount = money_to_decimal(nominal)
+    currency = _currency_of(nominal, str(getattr(instrument, "currency", "") or "").upper())
+    return amount, currency
+
+
+async def _bond_nominal(client, instrument_id_type, figi: str) -> tuple[Decimal, str]:
+    response = await client.instruments.bond_by(
+        id_type=instrument_id_type.INSTRUMENT_ID_TYPE_FIGI,
+        id=figi,
+    )
+    return _nominal_from(response.instrument)
 
 
 async def _load_instruments(client, instrument_id_type, figis: set[str]) -> list[InstrumentDTO]:
@@ -250,19 +303,32 @@ async def _load_instruments(client, instrument_id_type, figis: set[str]) -> list
                 id=figi,
             )
             instrument = response.instrument
+            instrument_type = str(
+                getattr(instrument, "instrument_type", "")
+                or enum_name(getattr(instrument, "instrument_kind", None))
+            )
+            nominal = getattr(instrument, "nominal", None)
+            nominal_amount = money_to_decimal(nominal)
+            nominal_currency = _currency_of(nominal, "")
+            if instrument_type.lower() in {"bond", "bonds"} and nominal_amount <= 0:
+                try:
+                    nominal_amount, nominal_currency = await _bond_nominal(
+                        client, instrument_id_type, figi
+                    )
+                except Exception:
+                    logger.warning("Bond nominal not found for figi=%s", figi)
             result.append(
                 InstrumentDTO(
                     figi=figi,
                     ticker=str(getattr(instrument, "ticker", "") or ""),
                     isin=str(getattr(instrument, "isin", "") or ""),
                     name=str(getattr(instrument, "name", "") or ""),
-                    instrument_type=str(
-                        getattr(instrument, "instrument_type", "")
-                        or enum_name(getattr(instrument, "instrument_kind", None))
-                    ),
+                    instrument_type=instrument_type,
                     currency=str(getattr(instrument, "currency", "") or "RUB").upper(),
                     lot=int(getattr(instrument, "lot", 1) or 1),
                     uid=str(getattr(instrument, "uid", "") or ""),
+                    nominal=nominal_amount,
+                    nominal_currency=nominal_currency,
                 )
             )
         except Exception:

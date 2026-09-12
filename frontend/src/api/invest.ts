@@ -62,6 +62,29 @@ export type Operation = {
   occurred_at: string;
 };
 
+export type DashboardPosition = Position & {
+  value: string;
+  cost: string;
+  pnl: string;
+  pnl_percent: string | null;
+  share: string;
+  is_cash: boolean;
+  average_source: string;
+};
+
+export type Dashboard = {
+  value: string;
+  invested: string;
+  profit: string;
+  profit_percent: string | null;
+  cash: string;
+  prices_as_of: string | null;
+  prices_live: boolean;
+  history_from: string | null;
+  invested_missing: boolean;
+  positions: DashboardPosition[];
+};
+
 export function getConnection() {
   return apiJson<ConnectionStatus>("/api/settings/connection");
 }
@@ -83,6 +106,10 @@ export function getSyncRuns() {
 
 export function getAccounts() {
   return apiJson<Account[]>("/api/accounts");
+}
+
+export function getDashboard() {
+  return apiJson<Dashboard>("/api/dashboard");
 }
 
 export function getPositions() {

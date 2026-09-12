@@ -1,19 +1,18 @@
 import { useEffect } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
-import {
-  getAccounts,
-  getConnection,
-  getOperations,
-  getPositions,
-  startSync,
-} from "../api/invest";
+import { getAccounts, getConnection, getDashboard, getOperations, startSync } from "../api/invest";
 
-const cards = [
-  { title: "Стоимость", hint: "Позиции × цена + кэш" },
-  { title: "Вложено", hint: "Чистые вводы − выводы" },
-  { title: "Прибыль", hint: "Стоимость − вложено" },
-];
+function formatMoney(value: string | undefined): string {
+  const parsed = Number(value);
+  if (Number.isNaN(parsed)) {
+    return "—";
+  }
+  return `${parsed.toLocaleString("ru-RU", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })} ₽`;
+}
 
 function formatNumber(value: string): string {
   const parsed = Number(value);
@@ -21,6 +20,23 @@ function formatNumber(value: string): string {
     return value;
   }
   return parsed.toLocaleString("ru-RU", { maximumFractionDigits: 6 });
+}
+
+function formatSignedMoney(value: string): string {
+  const parsed = Number(value);
+  const formatted = formatMoney(value);
+  if (Number.isNaN(parsed) || parsed <= 0) {
+    return formatted;
+  }
+  return `+${formatted}`;
+}
+
+function moneyClass(value: string | null | undefined): string {
+  const parsed = Number(value);
+  if (Number.isNaN(parsed) || parsed === 0) {
+    return "";
+  }
+  return parsed > 0 ? "text-gain" : "text-danger";
 }
 
 function accountType(type: string): string {
@@ -47,31 +63,43 @@ export function DashboardPage() {
     queryFn: getConnection,
     refetchInterval: (query) => (query.state.data?.status === "running" ? 2000 : false),
   });
-  const accounts = useQuery({ queryKey: ["accounts"], queryFn: getAccounts });
-  const positions = useQuery({ queryKey: ["positions"], queryFn: getPositions });
-  const operations = useQuery({ queryKey: ["operations"], queryFn: getOperations });
+  const configured = connection.data?.configured === true;
+  const dashboard = useQuery({
+    queryKey: ["dashboard"],
+    queryFn: getDashboard,
+    enabled: configured,
+    refetchInterval: 30_000,
+  });
+  const accounts = useQuery({ queryKey: ["accounts"], queryFn: getAccounts, enabled: configured });
+  const operations = useQuery({
+    queryKey: ["operations"],
+    queryFn: getOperations,
+    enabled: configured,
+  });
 
   const syncMutation = useMutation({
     mutationFn: startSync,
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ["connection"] });
       await queryClient.invalidateQueries({ queryKey: ["accounts"] });
-      await queryClient.invalidateQueries({ queryKey: ["positions"] });
+      await queryClient.invalidateQueries({ queryKey: ["dashboard"] });
       await queryClient.invalidateQueries({ queryKey: ["operations"] });
       await queryClient.invalidateQueries({ queryKey: ["sync-runs"] });
     },
   });
 
-  const configured = connection.data?.configured === true;
   const running = connection.data?.status === "running" || syncMutation.isPending;
 
   useEffect(() => {
     if (connection.data?.status === "ok") {
       void queryClient.invalidateQueries({ queryKey: ["accounts"] });
-      void queryClient.invalidateQueries({ queryKey: ["positions"] });
+      void queryClient.invalidateQueries({ queryKey: ["dashboard"] });
       void queryClient.invalidateQueries({ queryKey: ["operations"] });
     }
   }, [connection.data?.last_sync_at, connection.data?.status, queryClient]);
+
+  const snapshot = dashboard.data;
+  const historyFrom = connection.data?.history_from ?? snapshot?.history_from;
 
   return (
     <section className="space-y-8">
@@ -80,8 +108,8 @@ export function DashboardPage() {
           <h1 className="font-display text-3xl">Портфель</h1>
           <p className="mt-2 max-w-2xl text-sm text-moss">
             {configured
-              ? connection.data?.history_from
-                ? `Журнал операций с ${connection.data.history_from}. Стоимость и прибыль появятся в следующем блоке.`
+              ? historyFrom
+                ? `Журнал операций с ${historyFrom}. Стоимость в рублях; вложено — чистые вводы минус выводы.`
                 : "Токен сохранён. Нажмите «Обновить», чтобы подтянуть счета и операции."
               : "Сначала сохраните read-only токен Т‑Инвестиций в настройках."}
           </p>
@@ -113,21 +141,50 @@ export function DashboardPage() {
           {syncMutation.error instanceof Error ? syncMutation.error.message : "Не удалось обновить"}
         </p>
       ) : null}
+      {snapshot?.invested_missing ? (
+        <p className="text-sm text-moss">
+          Вводы в журнале не найдены — карточка «Вложено» может быть неполной.
+        </p>
+      ) : null}
 
       <div className="grid gap-4 sm:grid-cols-3">
-        {cards.map((card) => (
-          <article key={card.title} className="border border-line bg-paper-2/40 p-5">
-            <p className="text-xs uppercase tracking-[0.16em] text-moss">{card.title}</p>
-            <p className="mt-3 font-display text-3xl">—</p>
-            <p className="mt-2 text-xs text-moss">{card.hint}</p>
-          </article>
-        ))}
+        <article className="border border-line bg-paper-2/40 p-5">
+          <p className="text-xs uppercase tracking-[0.16em] text-moss">Стоимость</p>
+          <p className="mt-3 font-display text-3xl">
+            {configured ? formatMoney(snapshot?.value) : "—"}
+          </p>
+          <p className="mt-2 text-xs text-moss">
+            {configured && snapshot
+              ? `в т.ч. кэш ${formatMoney(snapshot.cash)}${
+                  snapshot.prices_live ? " · живые цены" : " · цена с последнего синка"
+                }`
+              : "Позиции × цена + кэш"}
+          </p>
+        </article>
+        <article className="border border-line bg-paper-2/40 p-5">
+          <p className="text-xs uppercase tracking-[0.16em] text-moss">Вложено</p>
+          <p className="mt-3 font-display text-3xl">
+            {configured ? formatMoney(snapshot?.invested) : "—"}
+          </p>
+          <p className="mt-2 text-xs text-moss">Чистые вводы − выводы</p>
+        </article>
+        <article className="border border-line bg-paper-2/40 p-5">
+          <p className="text-xs uppercase tracking-[0.16em] text-moss">Прибыль</p>
+          <p className={`mt-3 font-display text-3xl ${configured && snapshot ? moneyClass(snapshot.profit) : ""}`}>
+            {configured && snapshot ? formatSignedMoney(snapshot.profit) : "—"}
+          </p>
+          <p className={`mt-2 text-xs ${configured ? moneyClass(snapshot?.profit) : "text-moss"}`}>
+            {configured && snapshot?.profit_percent != null
+              ? `${Number(snapshot.profit_percent) > 0 ? "+" : ""}${formatNumber(snapshot.profit_percent)}% · стоимость − вложено`
+              : "Стоимость − вложено"}
+          </p>
+        </article>
       </div>
 
       {configured ? (
         <p className="text-sm text-moss">
           Счетов: {connection.data?.accounts_count ?? 0} · операций:{" "}
-          {connection.data?.operations_count ?? 0} · позиций: {connection.data?.positions_count ?? 0}
+          {connection.data?.operations_count ?? 0} · позиций: {snapshot?.positions.length ?? 0}
         </p>
       ) : null}
 
@@ -151,9 +208,9 @@ export function DashboardPage() {
       </div>
 
       <div>
-        <h2 className="font-display text-2xl">Позиции</h2>
+        <h2 className="font-display text-2xl">Активы</h2>
         <div className="mt-3 overflow-x-auto border border-line">
-          <table className="w-full min-w-[44rem] text-left text-sm">
+          <table className="w-full min-w-[56rem] text-left text-sm">
             <thead className="bg-paper-2 text-moss">
               <tr>
                 <th className="px-3 py-2 font-normal">Бумага</th>
@@ -161,20 +218,28 @@ export function DashboardPage() {
                 <th className="px-3 py-2 font-normal">Кол-во</th>
                 <th className="px-3 py-2 font-normal">Средняя</th>
                 <th className="px-3 py-2 font-normal">Цена</th>
+                <th className="px-3 py-2 font-normal">Стоимость</th>
+                <th className="px-3 py-2 font-normal">P&amp;L</th>
+                <th className="px-3 py-2 font-normal">Доля</th>
               </tr>
             </thead>
             <tbody>
-              {(positions.data ?? []).length === 0 ? (
+              {(snapshot?.positions ?? []).length === 0 ? (
                 <tr>
-                  <td className="px-3 py-3 text-moss" colSpan={5}>
+                  <td className="px-3 py-3 text-moss" colSpan={8}>
                     Нет позиций. Запустите синхронизацию.
                   </td>
                 </tr>
               ) : (
-                (positions.data ?? []).map((position) => (
+                (snapshot?.positions ?? []).map((position) => (
                   <tr key={`${position.account_id}-${position.figi}`} className="border-t border-line">
                     <td className="px-3 py-2">
-                      <p>{position.ticker || position.figi}</p>
+                      <p>
+                        {position.ticker || position.figi}
+                        {position.is_cash ? (
+                          <span className="ml-2 text-xs uppercase tracking-wide text-moss">кэш</span>
+                        ) : null}
+                      </p>
                       <p className="text-xs text-moss">{position.name}</p>
                     </td>
                     <td className="px-3 py-2">{position.account_name}</td>
@@ -185,6 +250,17 @@ export function DashboardPage() {
                     <td className="px-3 py-2">
                       {formatNumber(position.current_price)} {position.current_price_currency}
                     </td>
+                    <td className="px-3 py-2">{formatMoney(position.value)}</td>
+                    <td className={`px-3 py-2 ${moneyClass(position.pnl)}`}>
+                      {formatSignedMoney(position.pnl)}
+                      {position.pnl_percent != null ? (
+                        <span className="block text-xs">
+                          {Number(position.pnl_percent) > 0 ? "+" : ""}
+                          {formatNumber(position.pnl_percent)}%
+                        </span>
+                      ) : null}
+                    </td>
+                    <td className="px-3 py-2">{formatNumber(position.share)}%</td>
                   </tr>
                 ))
               )}

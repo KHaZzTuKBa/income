@@ -67,6 +67,48 @@ SELL_TYPES = {
     "OPERATION_TYPE_DELIVERY_SELL",
 }
 
+# Чистые вводы/выводы денег. Переводы между своими счетами сюда не входят.
+CASHFLOW_TYPES = {
+    "OPERATION_TYPE_INPUT",
+    "OPERATION_TYPE_OUTPUT",
+    "OPERATION_TYPE_INPUT_SWIFT",
+    "OPERATION_TYPE_OUTPUT_SWIFT",
+    "OPERATION_TYPE_INPUT_ACQUIRING",
+    "OPERATION_TYPE_OUTPUT_ACQUIRING",
+    "OPERATION_TYPE_INP_MULTI",
+    "OPERATION_TYPE_OUT_MULTI",
+}
+
+CURRENCY_FIGI = {
+    "RUB": "RUB000UTSTOM",
+    "USD": "BBG0013HGFT4",
+    "EUR": "BBG0013HJJ31",
+    "CNY": "BBG0013HRTL0",
+    "GBP": "BBG0013HQ5F0",
+}
+
+FIGI_TO_CURRENCY = {figi: code for code, figi in CURRENCY_FIGI.items()}
+
+
+def currency_code_of(*, figi: str = "", ticker: str = "", fallback: str = "") -> str:
+    if figi in FIGI_TO_CURRENCY:
+        return FIGI_TO_CURRENCY[figi]
+    for text in (figi or "", ticker or ""):
+        upper = text.upper()
+        if upper in CURRENCY_FIGI:
+            return upper
+        if "UTSTOM" in upper or "UTSTOD" in upper:
+            for code in CURRENCY_FIGI:
+                if upper.startswith(code):
+                    return code
+    cleaned = (fallback or "").upper()
+    return cleaned if cleaned in CURRENCY_FIGI else ""
+
+
+def canonical_cash_figi(figi: str, currency: str = "") -> str:
+    code = currency_code_of(figi=figi, fallback=currency)
+    return CURRENCY_FIGI.get(code, figi)
+
 
 @dataclass
 class AccountDTO:
@@ -119,6 +161,8 @@ class InstrumentDTO:
     currency: str = "RUB"
     lot: int = 1
     uid: str = ""
+    nominal: Decimal = Decimal("0")
+    nominal_currency: str = ""
 
 
 @dataclass
