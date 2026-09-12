@@ -2,9 +2,11 @@ import asyncio
 import logging
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from apscheduler.triggers.cron import CronTrigger
 from sqlalchemy import text
 
 from app.db import SessionLocal
+from app.services.sync import run_scheduled_sync
 
 logging.basicConfig(
     level=logging.INFO,
@@ -22,9 +24,23 @@ async def heartbeat() -> None:
         logger.exception("heartbeat failed")
 
 
+async def scheduled_sync() -> None:
+    try:
+        logger.info("scheduled sync started")
+        await run_scheduled_sync()
+        logger.info("scheduled sync finished")
+    except Exception:
+        logger.exception("scheduled sync failed")
+
+
 async def main() -> None:
     scheduler = AsyncIOScheduler(timezone="Europe/Moscow")
     scheduler.add_job(heartbeat, "interval", minutes=5, id="heartbeat")
+    scheduler.add_job(
+        scheduled_sync,
+        CronTrigger(hour="8,20", minute=0, timezone="Europe/Moscow"),
+        id="tinkoff_sync",
+    )
     scheduler.start()
     logger.info("worker started")
     await heartbeat()

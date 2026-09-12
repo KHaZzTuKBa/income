@@ -1,14 +1,12 @@
 import os
 
-os.environ.setdefault("APP_USERNAME", "admin")
-os.environ.setdefault("APP_PASSWORD", "test-password")
-os.environ.setdefault("SESSION_SECRET", "test-session-secret-not-for-prod-32")
-os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite://")
-os.environ.setdefault("FERNET_KEY", "test-fernet-key")
+from cryptography.fernet import Fernet
+
 os.environ["APP_USERNAME"] = "admin"
 os.environ["APP_PASSWORD"] = "test-password"
 os.environ["SESSION_SECRET"] = "test-session-secret-not-for-prod-32"
 os.environ["DATABASE_URL"] = "sqlite+aiosqlite://"
+os.environ["FERNET_KEY"] = Fernet.generate_key().decode()
 
 import pytest
 from httpx import ASGITransport, AsyncClient
@@ -42,3 +40,13 @@ async def client() -> AsyncClient:
         yield ac
 
     await engine.dispose()
+
+
+@pytest.fixture
+async def auth_client(client: AsyncClient) -> AsyncClient:
+    response = await client.post(
+        "/api/auth/login",
+        json={"username": "admin", "password": "test-password"},
+    )
+    assert response.status_code == 200
+    return client

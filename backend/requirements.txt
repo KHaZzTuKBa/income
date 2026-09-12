@@ -13,3 +13,6 @@ httpx>=0.28
 pytest>=8.3
 pytest-asyncio>=0.25
 aiosqlite>=0.20
+cryptography>=43,<47
+# Официальный SDK Т-Инвестиций. PyPI-пакет в карантине, ставим с GitLab Т-Банка.
+t-tech-investments>=0.3.3

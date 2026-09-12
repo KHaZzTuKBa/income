@@ -21,6 +21,8 @@ docker compose up --build
 
 Войдите логином и паролем из `.env` (`APP_USERNAME` / `APP_PASSWORD`).
 
+Дальше: Настройки → вставьте read-only токен Invest API → «Сохранить токен» → «Обновить». Токен проверяется через GetAccounts, шифруется Fernet и в UI не возвращается. Синк по расписанию — в 08:00 и 20:00 по Москве.
+
 Остановка: `docker compose down`. Данные Postgres остаются в volume `postgres_data`.
 
 ## Локальная разработка без контейнеров api/web
@@ -36,7 +38,7 @@ docker compose up db -d
 ```bash
 python -m venv .venv
 .venv\Scripts\activate
-pip install -r requirements.txt -r requirements-dev.txt
+pip install -r requirements.txt -r requirements-dev.txt --extra-index-url https://opensource.tbank.ru/api/v4/projects/238/packages/pypi/simple
 alembic upgrade head
 uvicorn app.main:app --reload --port 8000
 ```
