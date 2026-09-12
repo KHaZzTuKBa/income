@@ -95,6 +95,7 @@ jobs:
           host: ${{ secrets.VDS_HOST }}
           username: ${{ secrets.VDS_USER }}
           key: ${{ secrets.VDS_SSH_KEY }}
+          port: ${{ secrets.VDS_SSH_PORT || 8443 }}
           command_timeout: 10m
           envs: GHCR_TOKEN,GHCR_USER,GHCR_OWNER,IMAGE_TAG,APP_DIR
           script: |
