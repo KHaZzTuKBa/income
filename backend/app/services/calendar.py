@@ -12,8 +12,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app import db as db_module
 from app.models import Accrual, Account, BrokerConnection, Instrument, Operation, Position, User
-from app.schemas.calendar import CalendarEventOut, CalendarMonthOut, CalendarOut
+from app.schemas.calendar import (
+    CalendarEventOut,
+    CalendarMonthOut,
+    CalendarOut,
+    PaymentHistoryOut,
+    PaymentHistoryPointOut,
+)
 from app.services.crypto import CryptoError, decrypt_secret
+from app.services.history import resolve_history_window
 from app.services.invest import fetch_income_forecasts
 from app.services.invest_types import CURRENCY_FIGI, INCOME_TYPES
 from app.services.portfolio import is_cash_position, money_str, to_rub
@@ -106,6 +113,7 @@ def _empty_calendar(today: date) -> CalendarOut:
         )
     return CalendarOut(
         received_12m="0.00",
+        received_all_time="0.00",
         forecast_12m="0.00",
         securities_value="0.00",
         yield_percent=None,
@@ -320,6 +328,7 @@ def _assemble(accruals: list[Accrual], today: date, securities_value: Decimal) -
     month_received: dict[tuple[int, int], Decimal] = defaultdict(lambda: ZERO)
     month_upcoming: dict[tuple[int, int], Decimal] = defaultdict(lambda: ZERO)
     received_12m = ZERO
+    received_all_time = ZERO
     forecast_12m = ZERO
     events: list[CalendarEventOut] = []
     forecasts_as_of = None
@@ -328,8 +337,10 @@ def _assemble(accruals: list[Accrual], today: date, securities_value: Decimal) -
         if item.status != "received" and (forecasts_as_of is None or item.updated_at.date() > forecasts_as_of):
             forecasts_as_of = item.updated_at.date() if item.updated_at else today
         amount = item.amount_rub or ZERO
-        if item.status == "received" and past_from < item.event_date <= today:
-            received_12m += amount
+        if item.status == "received":
+            received_all_time += amount
+            if past_from < item.event_date <= today:
+                received_12m += amount
         if item.status != "received" and today < item.event_date <= future_to:
             forecast_12m += amount
         key = (item.event_date.year, item.event_date.month)
@@ -380,10 +391,84 @@ def _assemble(accruals: list[Accrual], today: date, securities_value: Decimal) -
 
     return CalendarOut(
         received_12m=money_str(received_12m),
+        received_all_time=money_str(received_all_time),
         forecast_12m=money_str(forecast_12m),
         securities_value=money_str(securities_value),
         yield_percent=yield_percent,
         forecasts_as_of=forecasts_as_of,
         months=months,
         events=events,
+    )
+
+
+def _month_last_day(value: date) -> date:
+    return add_months(month_start(value), 1) - timedelta(days=1)
+
+
+async def load_payment_history(
+    session: AsyncSession,
+    user: User,
+    *,
+    period: str = "all",
+    year: int | None = None,
+    from_day: date | None = None,
+    to_day: date | None = None,
+    today: date | None = None,
+) -> PaymentHistoryOut:
+    today = today or moscow_today()
+    empty = PaymentHistoryOut(period=period)
+    connection = await get_connection(session, user.id)
+    if connection is None:
+        return empty
+
+    result = await session.execute(
+        select(Accrual).where(Accrual.connection_id == connection.id, Accrual.status == "received")
+    )
+    received = list(result.scalars())
+    if not received:
+        return empty
+
+    years = sorted({item.event_date.year for item in received})
+    first_day = min(item.event_date for item in received)
+    start, end, granularity = resolve_history_window(
+        period=period,
+        year=year,
+        from_day=from_day,
+        to_day=to_day,
+        today=today,
+        first_day=first_day,
+    )
+
+    totals: dict[date, Decimal] = defaultdict(lambda: ZERO)
+    window_total = ZERO
+    for item in received:
+        if item.event_date < start or item.event_date > end:
+            continue
+        amount = item.amount_rub or ZERO
+        window_total += amount
+        key = item.event_date if granularity == "day" else _month_last_day(item.event_date)
+        totals[key] += amount
+
+    points: list[PaymentHistoryPointOut] = []
+    if granularity == "day":
+        cursor = start
+        while cursor <= end:
+            points.append(PaymentHistoryPointOut(day=cursor, amount=money_str(totals[cursor])))
+            cursor += timedelta(days=1)
+    else:
+        cursor = month_start(start)
+        last = month_start(end)
+        while cursor <= last:
+            bucket = _month_last_day(cursor)
+            points.append(PaymentHistoryPointOut(day=bucket, amount=money_str(totals[bucket])))
+            cursor = add_months(cursor, 1)
+
+    return PaymentHistoryOut(
+        period=period,
+        granularity=granularity,
+        from_day=start,
+        to_day=end,
+        years=years,
+        total=money_str(window_total),
+        points=points,
     )

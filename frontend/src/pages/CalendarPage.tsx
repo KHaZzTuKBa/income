@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { getCalendar, type CalendarEvent, type CalendarMonth } from "../api/calendar";
+import { PaymentsChart } from "../components/PaymentsChart";
 
 function formatMoney(value: string | undefined): string {
   const parsed = Number(value);
@@ -106,7 +107,7 @@ export function CalendarPage() {
         </p>
       ) : null}
 
-      <div className="grid gap-4 sm:grid-cols-3">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <article className="border border-line bg-paper-2/40 p-5">
           <p className="text-xs uppercase tracking-[0.16em] text-moss">Получено за 12 мес</p>
           <p className="mt-3 font-display text-3xl">{formatMoney(data?.received_12m)}</p>
@@ -119,6 +120,10 @@ export function CalendarPage() {
           <p className="text-xs uppercase tracking-[0.16em] text-moss">Пассивный доход</p>
           <p className="mt-3 font-display text-3xl">{formatShare(data?.yield_percent)}</p>
           <p className="mt-2 text-xs text-moss">Прогноз / стоимость бумаг</p>
+        </article>
+        <article className="border border-line bg-paper-2/40 p-5">
+          <p className="text-xs uppercase tracking-[0.16em] text-moss">Получено за всё время</p>
+          <p className="mt-3 font-display text-3xl">{formatMoney(data?.received_all_time)}</p>
         </article>
       </div>
 
@@ -136,6 +141,8 @@ export function CalendarPage() {
           ))}
         </div>
       </div>
+
+      <PaymentsChart enabled={calendar.isSuccess} />
 
       <EventTable title="Ближайшие выплаты" rows={upcoming} empty="Нет объявленных и прогнозных выплат." />
       <EventTable title="Получено за 12 месяцев" rows={received} empty="В журнале нет дивидендов и купонов за этот период." />
