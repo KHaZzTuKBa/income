@@ -31,6 +31,30 @@ function formatMoney(value: number): string {
   })} ₽`;
 }
 
+function formatMoneyExact(value: number): string {
+  return `${value.toLocaleString("ru-RU", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })} ₽`;
+}
+
+function formatSignedMoney(value: number): string {
+  const formatted = formatMoneyExact(value);
+  return value > 0 ? `+${formatted}` : formatted;
+}
+
+function moneyClass(value: number): string {
+  if (value === 0) {
+    return "";
+  }
+  return value > 0 ? "text-gain" : "text-danger";
+}
+
+function formatPercent(value: number): string {
+  const formatted = value.toLocaleString("ru-RU", { maximumFractionDigits: 2 });
+  return `${value > 0 ? "+" : ""}${formatted}%`;
+}
+
 function isoDate(value: Date): string {
   const year = value.getFullYear();
   const month = String(value.getMonth() + 1).padStart(2, "0");
@@ -159,7 +183,7 @@ export function PortfolioCharts({ enabled }: { enabled: boolean }) {
                 title={item.account_name}
                 series={item}
                 granularity={granularity}
-                showBenchmark={item.account_id == null}
+                showImoex={item.account_id == null}
                 building={building}
               />
             </article>
@@ -174,17 +198,17 @@ function ValueBarChart({
   title,
   series,
   granularity,
-  showBenchmark,
+  showImoex,
   building,
 }: {
   title: string;
   series: HistorySeries;
   granularity: HistoryGranularity;
-  showBenchmark: boolean;
+  showImoex: boolean;
   building: boolean;
 }) {
   const [hover, setHover] = useState<number | null>(null);
-  const points = useMemo(() => toChartPoints(series.points, showBenchmark), [series.points, showBenchmark]);
+  const points = useMemo(() => toChartPoints(series.points, showImoex), [series.points, showImoex]);
 
   if (series.points.length === 0) {
     return (
@@ -214,6 +238,12 @@ function ValueBarChart({
   const active = points[hover ?? points.length - 1];
   const ticks = 4;
   const labelEvery = Math.max(1, Math.ceil(points.length / 6));
+  const openValue = num(series.open_value);
+  const openInvested = num(series.open_invested);
+  const investedPeriod = active.invested - openInvested;
+  const profitPeriod = active.value - active.invested - (openValue - openInvested);
+  const profitPercent =
+    investedPeriod !== 0 ? (profitPeriod / investedPeriod) * 100 : openValue !== 0 ? (profitPeriod / openValue) * 100 : null;
 
   const investedPath = points
     .map((item, index) => `${index === 0 ? "M" : "L"} ${(x(index) + barW / 2).toFixed(1)} ${y(item.invested).toFixed(1)}`)
@@ -238,14 +268,10 @@ function ValueBarChart({
       </div>
       <svg
         viewBox={`0 0 ${width} ${height}`}
-        className="mt-3 h-64 w-full"
+        preserveAspectRatio="xMidYMid meet"
+        className="mt-3 w-full"
+        style={{ aspectRatio: `${width} / ${height}` }}
         onMouseLeave={() => setHover(null)}
-        onMouseMove={(event) => {
-          const box = event.currentTarget.getBoundingClientRect();
-          const local = ((event.clientX - box.left) / box.width) * width;
-          const index = Math.floor((local - pad.left) / slot);
-          setHover(Math.max(0, Math.min(points.length - 1, index)));
-        }}
       >
         {[...Array(ticks + 1)].map((_, index) => {
           const value = minV + (span * index) / ticks;
@@ -274,8 +300,8 @@ function ValueBarChart({
             />
           );
         })}
-        {showBenchmark ? <path d={investedPath} fill="none" stroke="#3d6b54" strokeWidth="1.5" strokeDasharray="5 4" /> : null}
-        {showBenchmark && imoexPath ? <path d={imoexPath} fill="none" stroke="#9b2c2c" strokeWidth="1.5" /> : null}
+        <path d={investedPath} fill="none" stroke="#3d6b54" strokeWidth="1.5" strokeDasharray="5 4" />
+        {showImoex && imoexPath ? <path d={imoexPath} fill="none" stroke="#9b2c2c" strokeWidth="1.5" /> : null}
         {points.map((item, index) =>
           index % labelEvery === 0 || index === points.length - 1 ? (
             <text
@@ -290,36 +316,63 @@ function ValueBarChart({
             </text>
           ) : null
         )}
+        {points.map((item, index) => (
+          <rect
+            key={`hit-${item.day}`}
+            x={pad.left + slot * index}
+            y={0}
+            width={slot}
+            height={height}
+            fill="none"
+            pointerEvents="all"
+            className="cursor-crosshair"
+            onMouseEnter={() => setHover(index)}
+          />
+        ))}
       </svg>
-      {showBenchmark ? (
-        <div className="mt-2 flex flex-wrap gap-4 text-xs text-moss">
+      <div className="mt-3 grid gap-3 sm:grid-cols-2">
+        <article className="border border-line bg-paper/70 p-3">
+          <p className="text-xs uppercase tracking-[0.16em] text-moss">Вложено</p>
+          <p className="mt-1 font-display text-xl">{formatSignedMoney(investedPeriod)}</p>
+          <p className="mt-1 text-xs text-moss">Чистые вводы − выводы за период</p>
+        </article>
+        <article className="border border-line bg-paper/70 p-3">
+          <p className="text-xs uppercase tracking-[0.16em] text-moss">Прибыль</p>
+          <p className={`mt-1 font-display text-xl ${moneyClass(profitPeriod)}`}>{formatSignedMoney(profitPeriod)}</p>
+          <p className={`mt-1 text-xs ${moneyClass(profitPeriod) || "text-moss"}`}>
+            {profitPercent != null
+              ? `${formatPercent(profitPercent)} · изменение стоимости − вводы`
+              : "Изменение стоимости − вводы за период"}
+          </p>
+        </article>
+      </div>
+      <div className="mt-2 flex flex-wrap gap-4 text-xs text-moss">
+        <span>
+          <span className="mr-1 inline-block h-2 w-4 bg-forest align-middle" />
+          стоимость на конец периода
+        </span>
+        <span>
+          <span className="mr-1 inline-block h-0.5 w-4 border-t border-dashed border-moss align-middle" />
+          вложено
+        </span>
+        {showImoex && points.some((item) => item.imoex != null) ? (
           <span>
-            <span className="mr-1 inline-block h-2 w-4 bg-forest align-middle" />
-            стоимость на конец периода
+            <span className="mr-1 inline-block h-0.5 w-4 bg-danger align-middle" />
+            IMOEX к старту периода
           </span>
-          <span>
-            <span className="mr-1 inline-block h-0.5 w-4 border-t border-dashed border-moss align-middle" />
-            вложено
-          </span>
-          {points.some((item) => item.imoex != null) ? (
-            <span>
-              <span className="mr-1 inline-block h-0.5 w-4 bg-danger align-middle" />
-              IMOEX к старту периода
-            </span>
-          ) : null}
-        </div>
-      ) : null}
+        ) : null}
+      </div>
     </div>
   );
 }
 
-function toChartPoints(points: HistoryPoint[], showBenchmark: boolean): ChartPoint[] {
+function toChartPoints(points: HistoryPoint[], showImoex: boolean): ChartPoint[] {
   const first = points.find((item) => num(item.value) > 0 && item.imoex != null && num(item.imoex) > 0);
-  const scale = showBenchmark && first ? num(first.value) / num(first.imoex) : 0;
+  const scale = showImoex && first ? num(first.value) / num(first.imoex) : 0;
   return points.map((item) => ({
     day: item.day,
     value: num(item.value),
     invested: num(item.invested),
-    imoex: showBenchmark && item.imoex != null && scale > 0 ? num(item.imoex) * scale : null,
+    imoex: showImoex && item.imoex != null && scale > 0 ? num(item.imoex) * scale : null,
   }));
 }

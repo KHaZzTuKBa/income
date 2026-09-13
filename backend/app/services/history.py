@@ -54,6 +54,8 @@ def compute_snapshots(
     start: date,
     end: date,
     close_currency: dict[str, str] | None = None,
+    figi_aliases: dict[str, str] | None = None,
+    account_types: dict[int, str] | None = None,
 ) -> list[dict]:
     return compute_all_snapshots(
         operations,
@@ -63,6 +65,8 @@ def compute_snapshots(
         start,
         end,
         close_currency=close_currency,
+        figi_aliases=figi_aliases,
+        account_types=account_types,
     )[None]
 
 
@@ -75,7 +79,12 @@ def compute_all_snapshots(
     end: date,
     close_currency: dict[str, str] | None = None,
     extra_account_ids: list[int] | None = None,
+    figi_aliases: dict[str, str] | None = None,
+    account_types: dict[int, str] | None = None,
 ) -> dict[int | None, list[dict]]:
+    aliases = figi_aliases or canonical_figi_map(instruments)
+    priced = merge_alias_prices(closes, aliases)
+    types = account_types or {}
     ordered = sorted(
         [item for item in operations if _executed(item)],
         key=lambda item: (getattr(item, "occurred_at"), getattr(item, "id", 0) or 0),
@@ -99,18 +108,27 @@ def compute_all_snapshots(
     day = start
     while day <= end:
         while index < len(ordered) and moscow_day(ordered[index].occurred_at) <= day:
-            account_id, invested = _apply_operation(ordered[index], holdings, cash_pay, closes, day)
+            account_id, invested = _apply_operation(
+                ordered[index], holdings, cash_pay, priced, day, aliases
+            )
             if account_id:
                 invested_by[account_id] += invested
             index += 1
-        fx_prices = _fx_prices(closes, day)
+        fx_prices = _fx_prices(priced, day)
         total_cash = ZERO
         total_sec = ZERO
         total_invested = ZERO
         for account_id in account_ids:
-            cash = _cash_rub(cash_pay, holdings, instruments, fx_prices, account_id)
+            cash = _cash_rub(
+                cash_pay,
+                holdings,
+                instruments,
+                fx_prices,
+                account_id,
+                include_payments=types.get(account_id) != "invest_box",
+            )
             securities = _securities_rub(
-                holdings, instruments, closes, price_ccy, day, fx_prices, account_id
+                holdings, instruments, priced, price_ccy, day, fx_prices, account_id
             )
             invested = invested_by[account_id]
             series[account_id].append(
@@ -138,6 +156,103 @@ def compute_all_snapshots(
         )
         day += timedelta(days=1)
     return series
+
+
+def instrument_group_key(instrument: Any | None, figi: str) -> str:
+    """Один ключ для сменённых FIGI одной бумаги (тот же ISIN и тикер). TMON@ отдельно от TMON."""
+    if instrument is not None and _is_cash_figi(figi, instrument):
+        return f"figi:{figi}"
+    isin = (getattr(instrument, "isin", None) or "").strip().upper()
+    ticker = (getattr(instrument, "ticker", None) or "").strip().upper()
+    if isin and ticker:
+        return f"{isin}:{ticker}"
+    if isin:
+        return f"isin:{isin}"
+    if ticker:
+        return f"ticker:{ticker}"
+    return f"figi:{figi}"
+
+
+def canonical_figi_map(
+    instruments: dict[str, Any],
+    preferred: set[str] | None = None,
+    price_counts: dict[str, int] | None = None,
+) -> dict[str, str]:
+    preferred = preferred or set()
+    price_counts = price_counts or {}
+    groups: dict[str, list[str]] = defaultdict(list)
+    for figi, instrument in instruments.items():
+        if not figi:
+            continue
+        groups[instrument_group_key(instrument, figi)].append(figi)
+    mapping: dict[str, str] = {}
+    for figis in groups.values():
+        chosen = _choose_canonical_figi(figis, preferred, price_counts)
+        for figi in figis:
+            mapping[figi] = chosen
+    return mapping
+
+
+def _choose_canonical_figi(
+    figis: list[str], preferred: set[str], price_counts: dict[str, int]
+) -> str:
+    for figi in figis:
+        if figi in preferred:
+            return figi
+    return max(figis, key=lambda item: (price_counts.get(item, 0), item))
+
+
+def merge_alias_prices(
+    closes: dict[str, dict[date, Decimal]], aliases: dict[str, str]
+) -> dict[str, dict[date, Decimal]]:
+    if not aliases:
+        return closes
+    groups: dict[str, set[str]] = defaultdict(set)
+    for figi, canonical in aliases.items():
+        groups[canonical].add(figi)
+        groups[canonical].add(canonical)
+    merged = {figi: dict(series) for figi, series in closes.items()}
+    for canonical, members in groups.items():
+        combined: dict[date, Decimal] = {}
+        for figi in members:
+            if figi != canonical:
+                combined.update(merged.get(figi, {}))
+        combined.update(merged.get(canonical, {}))
+        if not combined:
+            continue
+        for figi in members:
+            merged[figi] = dict(combined)
+    return merged
+
+
+def opening_balances(rows: list[Any], start: date) -> tuple[Decimal, Decimal]:
+    """Снимок на день до начала окна: от него считаются вводы и прибыль за период."""
+    previous = None
+    for item in rows:
+        day = getattr(item, "day", None)
+        if day is None:
+            day = item["day"]
+        if day < start:
+            previous = item
+        else:
+            break
+    if previous is None:
+        return ZERO, ZERO
+    if hasattr(previous, "value_rub"):
+        return Decimal(str(previous.value_rub)), Decimal(str(previous.invested_rub))
+    return Decimal(str(previous["value"])), Decimal(str(previous["invested"]))
+
+
+def period_invested_and_profit(
+    open_value: Decimal,
+    open_invested: Decimal,
+    value: Decimal,
+    invested: Decimal,
+) -> tuple[Decimal, Decimal]:
+    """Чистые вводы за окно и прибыль: изменение (стоимость − вложено)."""
+    invested_delta = invested - open_invested
+    profit = (value - invested) - (open_value - open_invested)
+    return invested_delta, profit
 
 
 def aggregate_points(points: list[dict], granularity: HistoryGranularity) -> list[dict]:
@@ -281,16 +396,28 @@ async def load_history(
         return [_point_out(item, with_imoex) for item in aggregate_points(daily, granularity)]
 
     points = to_points(total_rows, True)
-    series = [
-        HistorySeriesOut(account_id=None, account_name="Все счета", points=points),
-        *[
+    total_open_value, total_open_invested = opening_balances(total_rows, start)
+    account_series: list[HistorySeriesOut] = []
+    for account in accounts:
+        open_value, open_invested = opening_balances(account_rows.get(account.id, []), start)
+        account_series.append(
             HistorySeriesOut(
                 account_id=account.id,
                 account_name=names.get(account.id, account.broker_account_id),
                 points=to_points(account_rows.get(account.id, []), False),
+                open_value=money_str(open_value),
+                open_invested=money_str(open_invested),
             )
-            for account in accounts
-        ],
+        )
+    series = [
+        HistorySeriesOut(
+            account_id=None,
+            account_name="Все счета",
+            points=points,
+            open_value=money_str(total_open_value),
+            open_invested=money_str(total_open_invested),
+        ),
+        *account_series,
     ]
     return HistoryOut(
         building=building,
@@ -339,6 +466,12 @@ async def _rebuild(session: AsyncSession, connection: BrokerConnection, today: d
             await session.execute(select(Account.id).where(Account.connection_id == connection.id))
         ).scalars()
     )
+    account_types = {
+        item.id: item.type
+        for item in (
+            await session.execute(select(Account).where(Account.connection_id == connection.id))
+        ).scalars()
+    }
     if not operations:
         await _clear_snapshots(session, connection.id, account_ids)
         await session.commit()
@@ -353,13 +486,25 @@ async def _rebuild(session: AsyncSession, connection: BrokerConnection, today: d
     figis.update(item.figi for item in positions if item.figi)
     figis.update(figi for code, figi in CURRENCY_FIGI.items() if code != "RUB")
     instruments = await _instruments_by_figi(session, list(figis))
+    instruments = await _expand_instruments_by_isin(session, instruments)
+    preferred_figis = {item.figi for item in positions if item.figi}
+    figi_aliases = canonical_figi_map(instruments, preferred=preferred_figis)
+    source_figis = {item.figi for item in operations if item.figi}
+    source_figis.update(item.figi for item in positions if item.figi)
+    related = set(source_figis)
+    needed_canonical = {figi_aliases.get(figi, figi) for figi in source_figis}
+    for figi, canon in figi_aliases.items():
+        if canon in needed_canonical:
+            related.add(figi)
+            related.add(canon)
+    related.update(figi for code, figi in CURRENCY_FIGI.items() if code != "RUB")
     candle_figis = [
         figi
-        for figi in figis
+        for figi in related
         if figi and figi != IMOEX and not _is_cash_figi(figi, instruments.get(figi))
     ]
-    candle_figis.extend(figi for code, figi in CURRENCY_FIGI.items() if code != "RUB")
-    candle_figis = list(dict.fromkeys(candle_figis))
+    fx_figis = [figi for code, figi in CURRENCY_FIGI.items() if code != "RUB"]
+    candle_figis = list(dict.fromkeys([*candle_figis, *fx_figis]))
 
     fetched_any = False
     try:
@@ -402,6 +547,11 @@ async def _rebuild(session: AsyncSession, connection: BrokerConnection, today: d
         await _snapshot_today_only(session, connection, positions, instruments, today, account_ids)
         return
 
+    figi_aliases = canonical_figi_map(
+        instruments,
+        preferred=preferred_figis,
+        price_counts={figi: len(series) for figi, series in stored.items()},
+    )
     closes = {figi: _ffill(series, start, today) for figi, series in stored.items() if figi != IMOEX}
     imoex = _ffill(stored.get(IMOEX, {}), start, today)
     series = compute_all_snapshots(
@@ -413,6 +563,8 @@ async def _rebuild(session: AsyncSession, connection: BrokerConnection, today: d
         today,
         close_currency=close_currency,
         extra_account_ids=account_ids,
+        figi_aliases=figi_aliases,
+        account_types=account_types,
     )
     _pin_last(series, positions, instruments, closes, today)
 
@@ -586,6 +738,7 @@ def _apply_operation(
     cash_pay: dict[tuple[int, str], Decimal],
     closes: dict[str, dict[date, Decimal]],
     day: date,
+    aliases: dict[str, str] | None = None,
 ) -> tuple[int, Decimal]:
     currency = (getattr(operation, "currency", None) or "RUB").upper()
     account_id = int(getattr(operation, "account_id", 0) or 0)
@@ -597,6 +750,8 @@ def _apply_operation(
         invested = to_rub(payment, currency, _fx_prices(closes, day))
 
     figi = getattr(operation, "figi", "") or ""
+    if figi:
+        figi = (aliases or {}).get(str(figi), str(figi))
     op_type = getattr(operation, "operation_type", "") or ""
     if figi and op_type in BUY_TYPES | SELL_TYPES:
         key = (account_id, str(figi))
@@ -621,12 +776,14 @@ def _cash_rub(
     instruments: dict[str, Instrument],
     fx_prices: dict[str, Decimal],
     account_id: int | None = None,
+    include_payments: bool = True,
 ) -> Decimal:
     totals: dict[str, Decimal] = defaultdict(lambda: ZERO)
-    for (acc, currency), amount in cash_pay.items():
-        if account_id is not None and acc != account_id:
-            continue
-        totals[currency.upper()] += amount
+    if include_payments:
+        for (acc, currency), amount in cash_pay.items():
+            if account_id is not None and acc != account_id:
+                continue
+            totals[currency.upper()] += amount
     for (acc, figi), (qty, _avg, _ccy) in holdings.items():
         if account_id is not None and acc != account_id:
             continue
@@ -809,6 +966,19 @@ async def _instruments_by_figi(session: AsyncSession, figis: list[str]) -> dict[
         return {}
     result = await session.execute(select(Instrument).where(Instrument.figi.in_(unique)))
     return {item.figi: item for item in result.scalars()}
+
+
+async def _expand_instruments_by_isin(
+    session: AsyncSession, instruments: dict[str, Instrument]
+) -> dict[str, Instrument]:
+    isins = [item.isin for item in instruments.values() if getattr(item, "isin", None)]
+    if not isins:
+        return instruments
+    result = await session.execute(select(Instrument).where(Instrument.isin.in_(isins)))
+    merged = dict(instruments)
+    for item in result.scalars():
+        merged[item.figi] = item
+    return merged
 
 
 def should_rebuild_in_request() -> bool:

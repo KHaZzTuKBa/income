@@ -16,6 +16,8 @@ export type HistorySeries = {
   account_id: number | null;
   account_name: string;
   points: HistoryPoint[];
+  open_value: string;
+  open_invested: string;
 };
 
 export type HistorySnapshot = {

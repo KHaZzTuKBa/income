@@ -20,6 +20,8 @@ class HistorySeriesOut(BaseModel):
     account_id: int | None = None
     account_name: str
     points: list[HistoryPointOut]
+    open_value: str = "0.00"
+    open_invested: str = "0.00"
 
 
 class HistoryOut(BaseModel):
