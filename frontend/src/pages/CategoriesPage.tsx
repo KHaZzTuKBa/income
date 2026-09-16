@@ -32,6 +32,29 @@ function formatShare(value: string): string {
   })}%`;
 }
 
+function formatSignedMoney(value: string): string {
+  const parsed = Number(value);
+  const formatted = formatMoney(value);
+  if (Number.isNaN(parsed) || parsed <= 0) {
+    return formatted;
+  }
+  return `+${formatted}`;
+}
+
+function PnlHint({ pnl, pnlPercent }: { pnl: string; pnlPercent: string | null }) {
+  const costMissing = pnlPercent == null && Number(pnl) === 0;
+  if (costMissing) {
+    return null;
+  }
+  return (
+    <span className={`ml-1 ${deltaClass(pnl)}`}>
+      {" "}
+      ({formatSignedMoney(pnl)}
+      {pnlPercent != null ? ` · ${Number(pnlPercent) > 0 ? "+" : ""}${formatShare(pnlPercent)}` : ""})
+    </span>
+  );
+}
+
 function deltaClass(value: string): string {
   const parsed = Number(value);
   if (Number.isNaN(parsed) || Math.abs(parsed) < 0.05) {
@@ -146,7 +169,7 @@ export function CategoriesPage() {
       <div>
         <h2 className="font-display text-2xl">Факт vs план</h2>
         <div className="mt-3 overflow-x-auto border border-line">
-          <table className="w-full min-w-[40rem] text-left text-sm">
+          <table className="w-full min-w-[48rem] text-left text-sm">
             <thead className="bg-paper-2 text-moss">
               <tr>
                 <th className="px-3 py-2 font-normal">Папка</th>
@@ -177,7 +200,10 @@ export function CategoriesPage() {
                       {Number(node.delta_share) > 0 ? "+" : ""}
                       {formatShare(node.delta_share)}
                     </td>
-                    <td className="px-3 py-2">{formatMoney(node.value)}</td>
+                    <td className="px-3 py-2">
+                      {formatMoney(node.value)}
+                      <PnlHint pnl={node.pnl} pnlPercent={node.pnl_percent} />
+                    </td>
                   </tr>
                 ))
               )}
@@ -189,7 +215,10 @@ export function CategoriesPage() {
                   </td>
                   <td className="px-3 py-2 text-moss">—</td>
                   <td className="px-3 py-2 text-moss">{formatShare(data.unassigned_share)}</td>
-                  <td className="px-3 py-2">{formatMoney(data.unassigned_value)}</td>
+                  <td className="px-3 py-2">
+                    {formatMoney(data.unassigned_value)}
+                    <PnlHint pnl={data.unassigned_pnl} pnlPercent={data.unassigned_pnl_percent} />
+                  </td>
                 </tr>
               ) : null}
             </tbody>

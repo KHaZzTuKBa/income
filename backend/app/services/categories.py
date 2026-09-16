@@ -33,17 +33,23 @@ async def list_categories(session: AsyncSession, user: User) -> CategoriesOut:
     categories = await _user_categories(session, user.id)
     assignments = await _assignments(session, [item.id for item in categories])
     dashboard = await build_dashboard(session, user)
-    values, meta = _position_index(dashboard.positions)
+    values, costs, paper_values, meta = _position_index(dashboard.positions)
     portfolio_value = Decimal(dashboard.value)
 
     holdings_by_cat: dict[int, list[CategoryHoldingOut]] = defaultdict(list)
     assigned_figis: set[str] = set()
     own_value: dict[int, Decimal] = {item.id: ZERO for item in categories}
+    own_cost: dict[int, Decimal] = {item.id: ZERO for item in categories}
+    own_paper_value: dict[int, Decimal] = {item.id: ZERO for item in categories}
     for row in assignments:
         assigned_figis.add(row.figi)
         info = meta.get(row.figi, {"ticker": row.figi, "name": row.figi, "is_cash": False})
         amount = values.get(row.figi, ZERO)
         own_value[row.category_id] = own_value.get(row.category_id, ZERO) + amount
+        own_cost[row.category_id] = own_cost.get(row.category_id, ZERO) + costs.get(row.figi, ZERO)
+        own_paper_value[row.category_id] = own_paper_value.get(row.category_id, ZERO) + paper_values.get(
+            row.figi, ZERO
+        )
         holdings_by_cat[row.category_id].append(
             CategoryHoldingOut(
                 figi=row.figi,
@@ -61,13 +67,22 @@ async def list_categories(session: AsyncSession, user: User) -> CategoriesOut:
         group.sort(key=lambda item: (item.sort_order, item.id))
 
     total_by_id: dict[int, Decimal] = {}
+    cost_by_id: dict[int, Decimal] = {}
+    paper_value_by_id: dict[int, Decimal] = {}
 
-    def rollup(node: Category) -> Decimal:
+    def rollup(node: Category) -> tuple[Decimal, Decimal, Decimal]:
         total = own_value.get(node.id, ZERO)
+        cost = own_cost.get(node.id, ZERO)
+        paper = own_paper_value.get(node.id, ZERO)
         for child in children_map.get(node.id, []):
-            total += rollup(child)
+            child_total, child_cost, child_paper = rollup(child)
+            total += child_total
+            cost += child_cost
+            paper += child_paper
         total_by_id[node.id] = total
-        return total
+        cost_by_id[node.id] = cost
+        paper_value_by_id[node.id] = paper
+        return total, cost, paper
 
     roots = children_map.get(None, [])
     for root in roots:
@@ -75,6 +90,9 @@ async def list_categories(session: AsyncSession, user: User) -> CategoriesOut:
 
     def to_node(node: Category) -> CategoryNodeOut:
         total = total_by_id.get(node.id, ZERO)
+        cost = cost_by_id.get(node.id, ZERO)
+        paper = paper_value_by_id.get(node.id, ZERO)
+        pnl = paper - cost
         target = node.target_share or ZERO
         fact = (total / portfolio_value * HUNDRED) if portfolio_value > 0 else ZERO
         return CategoryNodeOut(
@@ -85,6 +103,9 @@ async def list_categories(session: AsyncSession, user: User) -> CategoriesOut:
             sort_order=node.sort_order,
             value=money_str(total),
             own_value=money_str(own_value.get(node.id, ZERO)),
+            cost=money_str(cost),
+            pnl=money_str(pnl),
+            pnl_percent=_pnl_percent(pnl, cost),
             fact_share=money_str(fact),
             delta_share=money_str(fact - target),
             holdings=holdings_by_cat.get(node.id, []),
@@ -92,12 +113,16 @@ async def list_categories(session: AsyncSession, user: User) -> CategoriesOut:
         )
 
     unassigned_value = ZERO
+    unassigned_cost = ZERO
+    unassigned_paper = ZERO
     unassigned: list[CategoryHoldingOut] = []
     for figi, info in sorted(meta.items(), key=lambda item: (-values.get(item[0], ZERO), item[1]["ticker"])):
         if figi in assigned_figis:
             continue
         amount = values.get(figi, ZERO)
         unassigned_value += amount
+        unassigned_cost += costs.get(figi, ZERO)
+        unassigned_paper += paper_values.get(figi, ZERO)
         unassigned.append(
             CategoryHoldingOut(
                 figi=figi,
@@ -110,6 +135,7 @@ async def list_categories(session: AsyncSession, user: User) -> CategoriesOut:
 
     root_target = sum((item.target_share or ZERO for item in roots), ZERO)
     unassigned_share = (unassigned_value / portfolio_value * HUNDRED) if portfolio_value > 0 else ZERO
+    unassigned_pnl = unassigned_paper - unassigned_cost
     return CategoriesOut(
         tree=[to_node(item) for item in roots],
         unassigned=unassigned,
@@ -117,6 +143,9 @@ async def list_categories(session: AsyncSession, user: User) -> CategoriesOut:
         root_target=money_str(root_target),
         unassigned_value=money_str(unassigned_value),
         unassigned_share=money_str(unassigned_share),
+        unassigned_cost=money_str(unassigned_cost),
+        unassigned_pnl=money_str(unassigned_pnl),
+        unassigned_pnl_percent=_pnl_percent(unassigned_pnl, unassigned_cost),
     )
 
 
@@ -207,18 +236,31 @@ async def assign_holding(session: AsyncSession, user: User, body: AssignmentIn) 
     await session.commit()
 
 
-def _position_index(positions) -> tuple[dict[str, Decimal], dict[str, dict]]:
+def _pnl_percent(pnl: Decimal, cost: Decimal) -> str | None:
+    if cost == 0:
+        return None
+    return money_str(pnl / cost * HUNDRED)
+
+
+def _position_index(
+    positions,
+) -> tuple[dict[str, Decimal], dict[str, Decimal], dict[str, Decimal], dict[str, dict]]:
     values: dict[str, Decimal] = defaultdict(lambda: ZERO)
+    costs: dict[str, Decimal] = defaultdict(lambda: ZERO)
+    paper_values: dict[str, Decimal] = defaultdict(lambda: ZERO)
     meta: dict[str, dict] = {}
     for item in positions:
         values[item.figi] += Decimal(item.value)
+        if not item.is_cash:
+            costs[item.figi] += Decimal(item.cost)
+            paper_values[item.figi] += Decimal(item.value)
         if item.figi not in meta:
             meta[item.figi] = {
                 "ticker": item.ticker or item.figi,
                 "name": item.name or item.figi,
                 "is_cash": item.is_cash,
             }
-    return values, meta
+    return values, costs, paper_values, meta
 
 
 async def _user_categories(session: AsyncSession, user_id: int) -> list[Category]:

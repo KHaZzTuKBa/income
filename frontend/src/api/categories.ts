@@ -16,6 +16,9 @@ export type CategoryNode = {
   sort_order: number;
   value: string;
   own_value: string;
+  cost: string;
+  pnl: string;
+  pnl_percent: string | null;
   fact_share: string;
   delta_share: string;
   holdings: CategoryHolding[];
@@ -29,6 +32,9 @@ export type CategoriesSnapshot = {
   root_target: string;
   unassigned_value: string;
   unassigned_share: string;
+  unassigned_cost: string;
+  unassigned_pnl: string;
+  unassigned_pnl_percent: string | null;
 };
 
 export function getCategories() {

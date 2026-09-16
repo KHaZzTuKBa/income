@@ -39,6 +39,9 @@ class CategoryNodeOut(BaseModel):
     sort_order: int
     value: str
     own_value: str
+    cost: str
+    pnl: str
+    pnl_percent: str | None = None
     fact_share: str
     delta_share: str
     holdings: list[CategoryHoldingOut]
@@ -55,3 +58,6 @@ class CategoriesOut(BaseModel):
     root_target: str
     unassigned_value: str
     unassigned_share: str
+    unassigned_cost: str
+    unassigned_pnl: str
+    unassigned_pnl_percent: str | None = None

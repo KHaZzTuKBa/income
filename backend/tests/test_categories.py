@@ -49,16 +49,25 @@ async def test_category_crud_and_fact(auth_client: AsyncClient, monkeypatch) -> 
     assert len(body["unassigned"]) == 1
     assert body["unassigned"][0]["ticker"] == "RUB"
 
+    assert body["unassigned_pnl"] == "0.00"
+    assert body["unassigned_pnl_percent"] is None
+
     root = body["tree"][0]
     assert root["name"] == "Акции"
     assert root["target_share"] == "60.00"
     assert root["value"] == "2700.00"
+    assert root["cost"] == "2500.00"
+    assert root["pnl"] == "200.00"
+    assert root["pnl_percent"] == "8.00"
     assert root["fact_share"] == "64.29"
     assert root["delta_share"] == "4.29"
     assert root["own_value"] == "0.00"
     child = root["children"][0]
     assert child["name"] == "Сбер"
     assert child["value"] == "2700.00"
+    assert child["cost"] == "2500.00"
+    assert child["pnl"] == "200.00"
+    assert child["pnl_percent"] == "8.00"
     assert child["fact_share"] == "64.29"
     assert child["holdings"][0]["ticker"] == "SBER"
 
