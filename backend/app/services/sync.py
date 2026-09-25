@@ -197,6 +197,16 @@ async def _upsert_accounts(
     return mapping
 
 
+def _keep_text(current: str, incoming: str, *, reject: str = "") -> str:
+    value = (incoming or "").strip()
+    existing = current or ""
+    if not value:
+        return existing
+    if reject and value == reject and existing and existing != reject:
+        return existing
+    return value
+
+
 async def _upsert_instruments(session: AsyncSession, payload: InvestPayload) -> int:
     if not payload.instruments:
         return 0
@@ -212,16 +222,21 @@ async def _upsert_instruments(session: AsyncSession, payload: InvestPayload) -> 
         if instrument is None:
             instrument = Instrument(figi=dto.figi)
             session.add(instrument)
-        instrument.ticker = dto.ticker
-        instrument.isin = dto.isin
-        instrument.name = dto.name
-        instrument.instrument_type = dto.instrument_type
-        instrument.currency = dto.currency
-        instrument.lot = dto.lot
-        instrument.uid = dto.uid
-        instrument.nominal = dto.nominal
-        instrument.nominal_currency = dto.nominal_currency
-        instrument.sector = dto.sector
+        instrument.ticker = _keep_text(instrument.ticker, dto.ticker)
+        instrument.isin = _keep_text(instrument.isin, dto.isin)
+        instrument.name = _keep_text(instrument.name, dto.name, reject=dto.figi)
+        instrument.instrument_type = _keep_text(instrument.instrument_type, dto.instrument_type)
+        instrument.sector = _keep_text(instrument.sector, dto.sector)
+        if dto.currency:
+            instrument.currency = dto.currency
+        if dto.lot:
+            instrument.lot = dto.lot
+        if dto.uid:
+            instrument.uid = dto.uid
+        if dto.nominal > 0:
+            instrument.nominal = dto.nominal
+        if dto.nominal_currency:
+            instrument.nominal_currency = dto.nominal_currency
     await session.flush()
     return len(figis)
 

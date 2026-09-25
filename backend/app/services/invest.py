@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import logging
 from datetime import date, datetime, timezone
 from decimal import Decimal
@@ -386,17 +387,132 @@ def _nominal_from(instrument) -> tuple[Decimal, str]:
 SHARE_TYPES = {"share", "shares", "stock"}
 BOND_TYPES = {"bond", "bonds"}
 ETF_TYPES = {"etf", "etfs"}
+TYPE_ALIASES = {
+    "shares": "share",
+    "stock": "share",
+    "bonds": "bond",
+    "etfs": "etf",
+    "currencies": "currency",
+    "futures": "future",
+    "options": "option",
+}
+CATALOG_METHODS = (
+    ("shares", "share"),
+    ("bonds", "bond"),
+    ("etfs", "etf"),
+    ("currencies", "currency"),
+)
+INSTRUMENT_FETCH_SLEEP = 0.05
+RESOURCE_RETRIES = 3
+
+
+def normalize_instrument_type(raw: str | None) -> str:
+    value = (raw or "").strip().lower()
+    prefix = "instrument_type_"
+    if value.startswith(prefix):
+        value = value[len(prefix) :]
+    return TYPE_ALIASES.get(value, value)
 
 
 def _sector_of(instrument) -> str:
     return str(getattr(instrument, "sector", "") or "").strip()[:64]
 
 
+def _is_resource_exhausted(exc: BaseException) -> bool:
+    text = str(exc).lower()
+    return "resource_exhausted" in text or "429" in text
+
+
+async def _retry_resource(factory, *, attempts: int = RESOURCE_RETRIES):
+    last_error: Exception | None = None
+    for attempt in range(attempts):
+        try:
+            return await factory()
+        except Exception as exc:
+            last_error = exc
+            if attempt + 1 >= attempts or not _is_resource_exhausted(exc):
+                raise
+            await asyncio.sleep(0.4 * (attempt + 1))
+    assert last_error is not None
+    raise last_error
+
+
+def _instrument_status_all():
+    try:
+        from t_tech.invest import InstrumentStatus
+    except ImportError:
+        try:
+            from tinkoff.invest import InstrumentStatus
+        except ImportError:
+            return None
+    return getattr(InstrumentStatus, "INSTRUMENT_STATUS_ALL", None)
+
+
+def _instrument_dto_from(instrument, default_type: str = "") -> InstrumentDTO:
+    figi = str(getattr(instrument, "figi", "") or "")
+    raw_type = str(getattr(instrument, "instrument_type", "") or "") or enum_name(
+        getattr(instrument, "instrument_kind", None)
+    )
+    instrument_type = normalize_instrument_type(raw_type) or default_type
+    nominal_amount, nominal_currency = _nominal_from(instrument)
+    try:
+        lot = int(getattr(instrument, "lot", 1) or 1)
+    except (TypeError, ValueError):
+        lot = 1
+    return InstrumentDTO(
+        figi=figi,
+        ticker=str(getattr(instrument, "ticker", "") or ""),
+        isin=str(getattr(instrument, "isin", "") or ""),
+        name=str(getattr(instrument, "name", "") or ""),
+        instrument_type=instrument_type,
+        currency=str(getattr(instrument, "currency", "") or "RUB").upper(),
+        lot=lot,
+        uid=str(getattr(instrument, "uid", "") or ""),
+        nominal=nominal_amount,
+        nominal_currency=nominal_currency,
+        sector=_sector_of(instrument),
+    )
+
+
+async def _call_catalog(method, status):
+    async def _invoke():
+        if status is None:
+            return await method()
+        try:
+            return await method(instrument_status=status)
+        except TypeError:
+            return await method()
+
+    return await _retry_resource(_invoke)
+
+
+async def _load_instrument_catalog(client) -> dict[str, InstrumentDTO]:
+    catalog: dict[str, InstrumentDTO] = {}
+    status = _instrument_status_all()
+    for method_name, kind in CATALOG_METHODS:
+        method = getattr(client.instruments, method_name, None)
+        if method is None:
+            continue
+        try:
+            response = await _call_catalog(method, status)
+        except Exception:
+            logger.warning("Instrument catalog %s failed", method_name, exc_info=True)
+            continue
+        for item in getattr(response, "instruments", None) or []:
+            figi = str(getattr(item, "figi", "") or "")
+            if not figi:
+                continue
+            catalog[figi] = _instrument_dto_from(item, default_type=kind)
+    return catalog
+
+
 async def _instrument_by_figi(client, instrument_id_type, method_name: str, figi: str):
     method = getattr(client.instruments, method_name)
-    return await method(
-        id_type=instrument_id_type.INSTRUMENT_ID_TYPE_FIGI,
-        id=figi,
+    return await _retry_resource(
+        lambda: method(
+            id_type=instrument_id_type.INSTRUMENT_ID_TYPE_FIGI,
+            id=figi,
+        )
     )
 
 
@@ -413,7 +529,7 @@ async def _typed_sector_and_nominal(
     nominal_amount: Decimal,
     nominal_currency: str,
 ) -> tuple[str, Decimal, str]:
-    kind = (instrument_type or "").lower()
+    kind = normalize_instrument_type(instrument_type)
     sector = ""
     if kind in BOND_TYPES:
         method_name = "bond_by"
@@ -434,50 +550,57 @@ async def _typed_sector_and_nominal(
     return sector, nominal_amount, nominal_currency
 
 
-async def _load_instruments(client, instrument_id_type, figis: set[str]) -> list[InstrumentDTO]:
-    result: list[InstrumentDTO] = []
-    for figi in sorted(figis):
-        if not figi:
-            continue
-        try:
-            response = await client.instruments.get_instrument_by(
+async def _fetch_instrument_by_figi(client, instrument_id_type, figi: str) -> InstrumentDTO | None:
+    try:
+        response = await _retry_resource(
+            lambda: client.instruments.get_instrument_by(
                 id_type=instrument_id_type.INSTRUMENT_ID_TYPE_FIGI,
                 id=figi,
             )
-            instrument = response.instrument
-            instrument_type = str(
-                getattr(instrument, "instrument_type", "")
-                or enum_name(getattr(instrument, "instrument_kind", None))
-            )
-            nominal = getattr(instrument, "nominal", None)
-            nominal_amount = money_to_decimal(nominal)
-            nominal_currency = _currency_of(nominal, "")
-            sector, nominal_amount, nominal_currency = await _typed_sector_and_nominal(
-                client,
-                instrument_id_type,
-                figi,
-                instrument_type,
-                nominal_amount,
-                nominal_currency,
-            )
-            if not sector:
-                sector = _sector_of(instrument)
-            result.append(
-                InstrumentDTO(
-                    figi=figi,
-                    ticker=str(getattr(instrument, "ticker", "") or ""),
-                    isin=str(getattr(instrument, "isin", "") or ""),
-                    name=str(getattr(instrument, "name", "") or ""),
-                    instrument_type=instrument_type,
-                    currency=str(getattr(instrument, "currency", "") or "RUB").upper(),
-                    lot=int(getattr(instrument, "lot", 1) or 1),
-                    uid=str(getattr(instrument, "uid", "") or ""),
-                    nominal=nominal_amount,
-                    nominal_currency=nominal_currency,
-                    sector=sector,
-                )
-            )
-        except Exception:
-            logger.warning("Instrument not found for figi=%s", figi)
+        )
+    except Exception:
+        logger.warning("Instrument not found for figi=%s", figi)
+        return None
+    instrument = response.instrument
+    dto = _instrument_dto_from(instrument)
+    if not dto.figi:
+        dto.figi = figi
+    if dto.instrument_type in SHARE_TYPES | BOND_TYPES | ETF_TYPES:
+        sector, nominal_amount, nominal_currency = await _typed_sector_and_nominal(
+            client,
+            instrument_id_type,
+            figi,
+            dto.instrument_type,
+            dto.nominal,
+            dto.nominal_currency,
+        )
+        if sector:
+            dto.sector = sector
+        if nominal_amount > 0:
+            dto.nominal = nominal_amount
+            dto.nominal_currency = nominal_currency or dto.nominal_currency
+    return dto
+
+
+async def _load_instruments(client, instrument_id_type, figis: set[str]) -> list[InstrumentDTO]:
+    needed = [figi for figi in sorted(figis) if figi]
+    if not needed:
+        return []
+    catalog = await _load_instrument_catalog(client)
+    result: list[InstrumentDTO] = []
+    missing: list[str] = []
+    for figi in needed:
+        dto = catalog.get(figi)
+        if dto is not None:
+            result.append(dto)
+        else:
+            missing.append(figi)
+    for index, figi in enumerate(missing):
+        dto = await _fetch_instrument_by_figi(client, instrument_id_type, figi)
+        if dto is not None:
+            result.append(dto)
+        else:
             result.append(InstrumentDTO(figi=figi, name=figi))
+        if index < len(missing) - 1:
+            await asyncio.sleep(INSTRUMENT_FETCH_SLEEP)
     return result

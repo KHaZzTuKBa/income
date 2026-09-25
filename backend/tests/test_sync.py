@@ -5,7 +5,7 @@ from httpx import AsyncClient
 from sqlalchemy import select
 
 from app import db as db_module
-from app.models import BrokerConnection, Operation
+from app.models import BrokerConnection, Instrument, Operation
 from app.services.crypto import decrypt_secret, encrypt_secret
 from app.services.invest_types import (
     AccountDTO,
@@ -15,7 +15,7 @@ from app.services.invest_types import (
     OperationDTO,
     PositionDTO,
 )
-from app.services.sync import begin_manual_sync, run_sync_job
+from app.services.sync import _upsert_instruments, begin_manual_sync, run_sync_job
 
 
 def _payload() -> InvestPayload:
@@ -194,3 +194,27 @@ async def test_sync_conflict(auth_client: AsyncClient, monkeypatch) -> None:
 
     response = await auth_client.post("/api/sync")
     assert response.status_code == 409
+
+
+async def test_upsert_stub_does_not_wipe_instrument(auth_client: AsyncClient, monkeypatch) -> None:
+    from tests.test_dashboard import _seed
+
+    payload = _payload()
+    for item in payload.instruments:
+        if item.figi == "BBG004730N88":
+            item.sector = "financial"
+    await _seed(auth_client, monkeypatch, payload, prices={})
+
+    stub = InvestPayload(
+        instruments=[InstrumentDTO(figi="BBG004730N88", name="BBG004730N88")],
+    )
+    async with db_module.SessionLocal() as session:
+        await _upsert_instruments(session, stub)
+        await session.commit()
+        instrument = (
+            await session.execute(select(Instrument).where(Instrument.figi == "BBG004730N88"))
+        ).scalar_one()
+        assert instrument.ticker == "SBER"
+        assert instrument.name == "Сбербанк"
+        assert instrument.instrument_type == "share"
+        assert instrument.sector == "financial"
