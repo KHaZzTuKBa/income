@@ -84,7 +84,7 @@ portfel/
     app/models/           # SQLAlchemy
     app/schemas/          # Pydantic ответы/входы
     app/services/         # вся доменная логика
-    alembic/versions/     # 0001…0006
+    alembic/versions/     # 0001…0008
     tests/                # pytest-asyncio, SQLite in-memory
   frontend/
     src/App.tsx           # маршруты
@@ -106,6 +106,7 @@ portfel/
 | XIRR | `backend/app/services/xirr.py` |
 | Снимки стоимости, свечи, IMOEX | `backend/app/services/history.py`, `quotes.py` |
 | Категории факт/план | `backend/app/services/categories.py` |
+| Отрасли / сектора | `backend/app/services/sectors.py` |
 | Шифрование токена | `backend/app/services/crypto.py` |
 | Новая таблица | `app/models/*` + Alembic `000N_*.py` + импорт в `models/__init__.py` и `alembic/env.py` |
 | Новый API | `app/api/routes/*.py` + `app/main.py` + `app/schemas/` |
@@ -123,6 +124,7 @@ portfel/
 | `/login` | `POST /api/auth/login`, `POST /api/auth/logout`, `GET /api/auth/me` |
 | `/` дашборд | `GET /api/dashboard`, `/api/accounts`, `/api/operations`, `/api/history` |
 | `/categories` | `GET/POST /api/categories`, `PATCH/DELETE /api/categories/{id}`, `PUT /api/categories/assignments` |
+| `/sectors` | `GET /api/sectors` |
 | `/calendar` | `GET /api/calendar?refresh=true` |
 | `/settings` | `GET/PUT /api/settings/connection`, `POST /api/sync`, `GET /api/sync/runs` |
 | — | `GET /api/health`, `GET /api/positions` |
@@ -143,6 +145,7 @@ OpenAPI: `http://localhost:8000/api/docs`.
 - **XIRR** = Excel‑подобный XIRR по тем же внешним потокам с **инверсией знака** (ввод для инвестора отрицательный) плюс текущая стоимость на сегодня. Нужны разные даты и оба знака.
 - **Пассивный доход (календарь)** = прогноз выплат на 12 месяцев / стоимость **бумаг без кэша**.
 - **Доля категории** = стоимость узла (свои бумаги + потомки) / **вся** стоимость портфеля. Цель `%` тоже от всего портфеля. Вложенная цель **не вычитается** из родителя; факт родителя **включает** детей.
+- **Доля отрасли** = стоимость бумаг сектора / стоимость **бумаг без кэша** в выбранном скоупе (все счета, один счёт или отмеченные папки).
 - Денежные суммы в API — **строки** (`"1234.56"`), не float.
 
 Облигации: котировка Т‑Банка часто **% номинала**. Пересчёт: `quoted_unit_price` + `resolve_bond_nominal` в `portfolio.py`. Не считать сырой `%` рублёвой ценой.
@@ -175,6 +178,12 @@ CNY BBG0013HRTL0 | GBP BBG0013HQ5F0
 
 Дерево папок, `holdings_categories.figi` уникален (бумага в одной папке). Глубина ограничена.
 
+### Отрасли — `sectors.py`
+
+- `GET /api/sectors`: круговые доли по `instruments.sector` (поле Share/Bond/Etf из Invest API, пишется при синке).
+- Кэш не входит. Стоимость — из `build_dashboard`. Пироги: «Все счета» + каждый счёт. `holdings[]` — бумаги с сектором для фильтра по категориям на фронте.
+- Пустой сектор → «Без отрасли».
+
 ### Календарь — `calendar.py`
 
 - Факт: каждый GET пересобирает `accruals` со статусом `received` из операций `INCOME_TYPES` (`DIVIDEND`, `COUPON`, `DIVIDEND_TRANSFER`, `DIV_EXT`).
@@ -203,14 +212,14 @@ CNY BBG0013HRTL0 | GBP BBG0013HQ5F0
 
 ## Модель данных
 
-Актуальная голова Alembic: **`0006_history`**. Цепочка: `0001_create_users` → `0002_tinkoff_sync` → `0003_instrument_nominal` → `0004_categories` → `0005_accruals` → `0006_history`.
+Актуальная голова Alembic: **`0008_instrument_sector`**. Цепочка: `0001_create_users` → `0002_tinkoff_sync` → `0003_instrument_nominal` → `0004_categories` → `0005_accruals` → `0006_history` → `0007_account_snapshots` → `0008_instrument_sector`.
 
 | Таблица | Смысл |
 | --- | --- |
 | `users` | логин + bcrypt |
 | `broker_connections` | токен Fernet, статус синка, `history_from` |
 | `accounts` | счета Т‑Банка |
-| `instruments` | figi, ticker, тип, валюта, номинал облигации |
+| `instruments` | figi, ticker, тип, валюта, номинал облигации, `sector` |
 | `operations` | сырой журнал |
 | `positions` | кэш текущего среза GetPortfolio |
 | `categories`, `holdings_categories` | дерево и привязка figi |

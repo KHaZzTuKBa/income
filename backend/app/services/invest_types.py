@@ -170,6 +170,7 @@ class InstrumentDTO:
     uid: str = ""
     nominal: Decimal = Decimal("0")
     nominal_currency: str = ""
+    sector: str = ""
 
 
 @dataclass

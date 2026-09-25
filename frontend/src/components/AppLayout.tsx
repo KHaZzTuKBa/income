@@ -33,12 +33,15 @@ export function AppLayout() {
                 <p className="mt-1 text-xs text-moss">Личный учёт портфеля</p>
               </div>
             </div>
-            <nav className="flex gap-4">
+            <nav className="flex flex-wrap gap-4">
               <NavLink to="/" end className={linkClass}>
                 Дашборд
               </NavLink>
               <NavLink to="/categories" className={linkClass}>
                 Категории
+              </NavLink>
+              <NavLink to="/sectors" className={linkClass}>
+                Отрасли
               </NavLink>
               <NavLink to="/calendar" className={linkClass}>
                 Календарь

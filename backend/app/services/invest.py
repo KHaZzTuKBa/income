@@ -383,12 +383,55 @@ def _nominal_from(instrument) -> tuple[Decimal, str]:
     return amount, currency
 
 
-async def _bond_nominal(client, instrument_id_type, figi: str) -> tuple[Decimal, str]:
-    response = await client.instruments.bond_by(
+SHARE_TYPES = {"share", "shares", "stock"}
+BOND_TYPES = {"bond", "bonds"}
+ETF_TYPES = {"etf", "etfs"}
+
+
+def _sector_of(instrument) -> str:
+    return str(getattr(instrument, "sector", "") or "").strip()[:64]
+
+
+async def _instrument_by_figi(client, instrument_id_type, method_name: str, figi: str):
+    method = getattr(client.instruments, method_name)
+    return await method(
         id_type=instrument_id_type.INSTRUMENT_ID_TYPE_FIGI,
         id=figi,
     )
+
+
+async def _bond_nominal(client, instrument_id_type, figi: str) -> tuple[Decimal, str]:
+    response = await _instrument_by_figi(client, instrument_id_type, "bond_by", figi)
     return _nominal_from(response.instrument)
+
+
+async def _typed_sector_and_nominal(
+    client,
+    instrument_id_type,
+    figi: str,
+    instrument_type: str,
+    nominal_amount: Decimal,
+    nominal_currency: str,
+) -> tuple[str, Decimal, str]:
+    kind = (instrument_type or "").lower()
+    sector = ""
+    if kind in BOND_TYPES:
+        method_name = "bond_by"
+    elif kind in SHARE_TYPES:
+        method_name = "share_by"
+    elif kind in ETF_TYPES:
+        method_name = "etf_by"
+    else:
+        return sector, nominal_amount, nominal_currency
+    try:
+        response = await _instrument_by_figi(client, instrument_id_type, method_name, figi)
+        typed = response.instrument
+        sector = _sector_of(typed)
+        if kind in BOND_TYPES and nominal_amount <= 0:
+            nominal_amount, nominal_currency = _nominal_from(typed)
+    except Exception:
+        logger.warning("Typed instrument not found for figi=%s type=%s", figi, instrument_type)
+    return sector, nominal_amount, nominal_currency
 
 
 async def _load_instruments(client, instrument_id_type, figis: set[str]) -> list[InstrumentDTO]:
@@ -409,13 +452,16 @@ async def _load_instruments(client, instrument_id_type, figis: set[str]) -> list
             nominal = getattr(instrument, "nominal", None)
             nominal_amount = money_to_decimal(nominal)
             nominal_currency = _currency_of(nominal, "")
-            if instrument_type.lower() in {"bond", "bonds"} and nominal_amount <= 0:
-                try:
-                    nominal_amount, nominal_currency = await _bond_nominal(
-                        client, instrument_id_type, figi
-                    )
-                except Exception:
-                    logger.warning("Bond nominal not found for figi=%s", figi)
+            sector, nominal_amount, nominal_currency = await _typed_sector_and_nominal(
+                client,
+                instrument_id_type,
+                figi,
+                instrument_type,
+                nominal_amount,
+                nominal_currency,
+            )
+            if not sector:
+                sector = _sector_of(instrument)
             result.append(
                 InstrumentDTO(
                     figi=figi,
@@ -428,6 +474,7 @@ async def _load_instruments(client, instrument_id_type, figis: set[str]) -> list
                     uid=str(getattr(instrument, "uid", "") or ""),
                     nominal=nominal_amount,
                     nominal_currency=nominal_currency,
+                    sector=sector,
                 )
             )
         except Exception:

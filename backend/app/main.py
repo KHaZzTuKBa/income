@@ -4,7 +4,7 @@ from collections.abc import AsyncIterator
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api.routes import auth, calendar, categories, health, history, portfolio, settings, sync
+from app.api.routes import auth, calendar, categories, health, history, portfolio, sectors, settings, sync
 from app.config import settings as app_settings
 from app.seed import seed_user
 
@@ -40,5 +40,6 @@ app.include_router(settings.router, prefix="/api/settings", tags=["settings"])
 app.include_router(sync.router, prefix="/api/sync", tags=["sync"])
 app.include_router(portfolio.router, prefix="/api", tags=["portfolio"])
 app.include_router(categories.router, prefix="/api/categories", tags=["categories"])
+app.include_router(sectors.router, prefix="/api/sectors", tags=["sectors"])
 app.include_router(calendar.router, prefix="/api/calendar", tags=["calendar"])
 app.include_router(history.router, prefix="/api/history", tags=["history"])

@@ -58,6 +58,7 @@ export function SettingsPage() {
       await queryClient.invalidateQueries({ queryKey: ["dashboard"] });
       await queryClient.invalidateQueries({ queryKey: ["accounts"] });
       await queryClient.invalidateQueries({ queryKey: ["operations"] });
+      await queryClient.invalidateQueries({ queryKey: ["sectors"] });
     },
   });
 

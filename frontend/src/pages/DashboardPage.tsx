@@ -86,6 +86,7 @@ export function DashboardPage() {
       await queryClient.invalidateQueries({ queryKey: ["operations"] });
       await queryClient.invalidateQueries({ queryKey: ["history"] });
       await queryClient.invalidateQueries({ queryKey: ["sync-runs"] });
+      await queryClient.invalidateQueries({ queryKey: ["sectors"] });
     },
   });
 
@@ -97,6 +98,7 @@ export function DashboardPage() {
       void queryClient.invalidateQueries({ queryKey: ["dashboard"] });
       void queryClient.invalidateQueries({ queryKey: ["operations"] });
       void queryClient.invalidateQueries({ queryKey: ["history"] });
+      void queryClient.invalidateQueries({ queryKey: ["sectors"] });
     }
   }, [connection.data?.last_sync_at, connection.data?.status, queryClient]);
 
