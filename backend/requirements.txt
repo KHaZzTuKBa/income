@@ -1,3 +1,6 @@
+# GitLab Т-Банка на сертификате Минцифры: certifi/GitHub Actions его не знают.
+--extra-index-url https://opensource.tbank.ru/api/v4/projects/238/packages/pypi/simple
+--trusted-host opensource.tbank.ru
 fastapi>=0.115,<1
 uvicorn[standard]>=0.32,<1
 sqlalchemy[asyncio]>=2.0.36,<2.1

@@ -40,7 +40,7 @@ docker compose up db -d
 ```bash
 python -m venv .venv
 .venv\Scripts\activate
-pip install -r requirements.txt -r requirements-dev.txt --extra-index-url https://opensource.tbank.ru/api/v4/projects/238/packages/pypi/simple
+pip install -r requirements.txt -r requirements-dev.txt
 alembic upgrade head
 uvicorn app.main:app --reload --port 8000
 ```

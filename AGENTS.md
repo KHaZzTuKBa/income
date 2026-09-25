@@ -35,7 +35,7 @@ docker compose run --rm --no-deps -v "c:\Users\Karasu322\Desktop\income\backend:
 | DB | PostgreSQL 16 в Docker |
 | Frontend | React + Vite + TypeScript, Tailwind v4, TanStack Query, React Router |
 | Auth | один пользователь из `.env`, bcrypt, httpOnly cookie `portfel_session` |
-| Invest | пакет `t-tech-investments` с GitLab Т‑Банка (`--extra-index-url https://opensource.tbank.ru/api/v4/projects/238/packages/pypi/simple`). Импорт: `from t_tech.invest import AsyncClient` с fallback на `tinkoff.invest` |
+| Invest | пакет `t-tech-investments` с GitLab Т‑Банка (индекс и `--trusted-host` в `backend/requirements.txt`). Импорт: `from t_tech.invest import AsyncClient` с fallback на `tinkoff.invest` |
 | Токен | Fernet at rest (`FERNET_KEY`), на фронт не отдаётся |
 
 Порты: UI **8080**, API **8000**, Postgres **5432**.

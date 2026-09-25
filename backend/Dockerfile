@@ -12,8 +12,7 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt \
-    --extra-index-url https://opensource.tbank.ru/api/v4/projects/238/packages/pypi/simple
+RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
 

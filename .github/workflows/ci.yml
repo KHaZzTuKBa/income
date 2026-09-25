@@ -28,7 +28,7 @@ jobs:
             backend/requirements.txt
             backend/requirements-dev.txt
       - name: Install
-        run: pip install -r requirements.txt -r requirements-dev.txt --extra-index-url https://opensource.tbank.ru/api/v4/projects/238/packages/pypi/simple
+        run: pip install -r requirements.txt -r requirements-dev.txt
       - name: Lint
         run: ruff check .
       - name: Test
