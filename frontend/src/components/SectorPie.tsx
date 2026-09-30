@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useRef, useEffect, useId } from "react";
 
 export type PiePaper = {
   figi: string;
@@ -189,9 +189,41 @@ export function SectorPie({
   const [hovered, setHovered] = useState<string | null>(null);
   const [listOpen, setListOpen] = useState(false);
   const [openSectors, setOpenSectors] = useState<string[]>([]);
+  const [highlightedSector, setHighlightedSector] = useState<string | null>(null);
+  const [scrollTarget, setScrollTarget] = useState<{ key: string; ts: number } | null>(null);
+  const sectorRefs = useRef<Map<string, HTMLElement>>(new Map());
+  const uniqueId = useId();
 
   const amounts = useMemo(() => slices.map((item) => Number(item.value) || 0), [slices]);
   const sum = useMemo(() => amounts.reduce((acc, item) => acc + item, 0), [amounts]);
+
+  const handleSectorClick = (itemKey: string) => {
+    setListOpen(true);
+    setOpenSectors((current) =>
+      current.includes(itemKey) ? current : [...current, itemKey],
+    );
+    setHighlightedSector(itemKey);
+    setScrollTarget({ key: itemKey, ts: Date.now() });
+  };
+
+  useEffect(() => {
+    if (!scrollTarget) return;
+    const timer = setTimeout(() => {
+      const el = sectorRefs.current.get(scrollTarget.key);
+      if (el) {
+        el.scrollIntoView({ behavior: "smooth", block: "center" });
+      }
+    }, 80);
+    return () => clearTimeout(timer);
+  }, [scrollTarget]);
+
+  useEffect(() => {
+    if (!highlightedSector) return;
+    const timer = setTimeout(() => {
+      setHighlightedSector(null);
+    }, 2200);
+    return () => clearTimeout(timer);
+  }, [highlightedSector]);
 
   const sectorGroups: SectorGroup[] = useMemo(() => {
     let cursor = 0;
@@ -246,7 +278,7 @@ export function SectorPie({
     );
   };
 
-  const filterId = `sector-shadow-${title.replace(/[^a-zA-Z0-9]/g, "")}`;
+  const filterId = `sector-shadow-${uniqueId.replace(/[^a-zA-Z0-9_-]/g, "")}`;
 
   return (
     <article className="rounded-3xl border border-emerald-500/15 bg-white p-6 sm:p-7 shadow-[0_4px_24px_-4px_rgba(16,185,129,0.06),0_2px_8px_-2px_rgba(0,0,0,0.02)] transition-all">
@@ -282,7 +314,10 @@ export function SectorPie({
                 return (
                   <g
                     key={group.itemKey}
-                    className="cursor-pointer"
+                    role="button"
+                    tabIndex={0}
+                    aria-label={`Открыть детализацию отрасли ${group.slice.label}`}
+                    className="cursor-pointer focus:outline-none"
                     style={{
                       transformBox: "view-box",
                       transformOrigin: "50px 50px",
@@ -292,6 +327,13 @@ export function SectorPie({
                     }}
                     filter={isHovered ? `url(#${filterId})` : undefined}
                     onMouseEnter={() => setHovered(group.itemKey)}
+                    onClick={() => handleSectorClick(group.itemKey)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        handleSectorClick(group.itemKey);
+                      }
+                    }}
                   >
                     {group.paths.map((d, pIdx) => (
                       <path
@@ -361,6 +403,9 @@ export function SectorPie({
                     {formatShare(tip.slice.share)}
                   </span>
                 </div>
+                <p className="mt-1 text-[10px] text-emerald-700/80 font-medium">
+                  Нажмите, чтобы открыть детализацию
+                </p>
               </div>
             ) : null}
           </div>
@@ -387,14 +432,26 @@ export function SectorPie({
                   const papers = item.holdings ?? [];
                   const sectorOpen = openSectors.includes(itemKey);
                   const isHovered = hovered === itemKey;
+                  const isHighlighted = highlightedSector === itemKey;
                   const dimmed = hovered != null && !isHovered;
                   const sectorColor = colors[item.key] ?? (!item.key ? "#64748b" : PALETTE[0]);
                   return (
                     <li
                       key={itemKey}
-                      className={`rounded-2xl transition-all duration-200 ${
-                        isHovered ? "bg-emerald-500/[0.08]" : "hover:bg-emerald-500/[0.04]"
-                      } ${dimmed ? "opacity-35" : ""}`}
+                      ref={(node) => {
+                        if (node) {
+                          sectorRefs.current.set(itemKey, node);
+                        } else {
+                          sectorRefs.current.delete(itemKey);
+                        }
+                      }}
+                      className={`scroll-mt-24 rounded-2xl transition-all duration-300 ${
+                        isHighlighted
+                          ? "bg-emerald-500/[0.14] ring-2 ring-emerald-500/50 shadow-sm"
+                          : isHovered
+                            ? "bg-emerald-500/[0.08]"
+                            : "hover:bg-emerald-500/[0.04]"
+                      } ${dimmed && !isHighlighted ? "opacity-35" : ""}`}
                       onMouseEnter={() => setHovered(itemKey)}
                       onMouseLeave={() => setHovered(null)}
                     >
