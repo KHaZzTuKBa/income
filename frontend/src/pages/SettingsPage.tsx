@@ -73,23 +73,40 @@ export function SettingsPage() {
   return (
     <section className="space-y-8">
       <div>
-        <h1 className="font-display text-3xl">Настройки</h1>
-        <p className="mt-2 max-w-2xl text-sm text-moss">
+        <h1 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-slate-900">Настройки</h1>
+        <p className="mt-2 max-w-2xl text-sm text-slate-600">
           Нужен read-only токен Invest API из кабинета Т‑Инвестиций. Он шифруется на сервере и в
           браузер больше не возвращается.
         </p>
       </div>
 
-      <form className="max-w-xl space-y-4 border border-line bg-paper-2/40 p-5" onSubmit={onSubmit}>
-        <p className="text-sm">
-          Статус: {statusLabel(connection.data?.status ?? null)}
-          {connection.data?.token_hint ? ` · ${connection.data.token_hint}` : ""}
-        </p>
-        <label className="block text-sm">
-          Токен
+      <form className="max-w-xl space-y-4 rounded-3xl border border-emerald-500/15 bg-white p-6 sm:p-7 shadow-sm transition-all duration-200" onSubmit={onSubmit}>
+        <div className="flex flex-wrap items-center gap-2 text-sm">
+          <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">Статус:</span>
+          <span
+            className={`inline-flex items-center gap-1.5 rounded-full px-3 py-0.5 text-xs font-medium border ${
+              connection.data?.status === "ok"
+                ? "bg-emerald-50 text-emerald-800 border-emerald-200"
+                : connection.data?.status === "running"
+                  ? "bg-blue-50 text-blue-800 border-blue-200"
+                  : connection.data?.status === "error"
+                    ? "bg-red-50 text-red-800 border-red-200"
+                    : "bg-slate-100 text-slate-700 border-slate-200"
+            }`}
+          >
+            {statusLabel(connection.data?.status ?? null)}
+          </span>
+          {connection.data?.token_hint ? (
+            <span className="text-xs text-slate-500">· {connection.data.token_hint}</span>
+          ) : null}
+        </div>
+        <label className="block">
+          <span className="block text-xs font-semibold uppercase tracking-wider text-slate-600 mb-1.5">
+            Токен
+          </span>
           <input
             type="password"
-            className="mt-1 w-full border border-line bg-paper px-3 py-2 outline-none focus:border-forest"
+            className="w-full rounded-2xl border border-slate-200 bg-slate-50/60 px-4 py-2.5 text-sm text-slate-900 outline-none transition-all duration-200 hover:border-emerald-400/50 focus:border-emerald-500 focus:bg-white focus:ring-4 focus:ring-emerald-500/10"
             value={token}
             onChange={(event) => setToken(event.target.value)}
             autoComplete="off"
@@ -105,7 +122,7 @@ export function SettingsPage() {
         <button
           type="submit"
           disabled={saveMutation.isPending}
-          className="bg-forest px-4 py-2 text-sm text-paper hover:bg-forest-2 disabled:opacity-60"
+          className="inline-flex items-center gap-2 rounded-full bg-emerald-600 hover:bg-emerald-700 text-white px-6 py-2.5 text-sm font-semibold shadow-sm shadow-emerald-600/20 transition-all duration-200 active:scale-95 disabled:opacity-50 cursor-pointer"
         >
           {saveMutation.isPending ? "Проверяем…" : "Сохранить токен"}
         </button>
@@ -116,12 +133,25 @@ export function SettingsPage() {
           type="button"
           onClick={() => syncMutation.mutate()}
           disabled={!configured || running}
-          className="border border-line bg-paper px-4 py-2 text-sm hover:border-forest hover:text-forest disabled:opacity-60"
+          className="inline-flex items-center gap-2 rounded-full bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2.5 text-sm font-semibold shadow-sm shadow-emerald-600/20 transition-all duration-200 active:scale-95 disabled:opacity-50"
         >
-          {running ? "Обновляем…" : "Обновить"}
+          <svg
+            viewBox="0 0 16 16"
+            className={`h-4 w-4 shrink-0 ${running ? "animate-spin" : ""}`}
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            aria-hidden="true"
+          >
+            <path d="M1.5 8a6.5 6.5 0 1 0 1.9-4.6L1.5 5.5" />
+            <path d="M1.5 1.5v4h4" />
+          </svg>
+          <span>{running ? "Обновляем…" : "Обновить"}</span>
         </button>
         {connection.data?.history_from ? (
-          <p className="text-sm text-moss">История операций с {connection.data.history_from}</p>
+          <p className="text-sm text-slate-500">История операций с {connection.data.history_from}</p>
         ) : null}
         {connection.data?.last_error ? (
           <p className="text-sm text-danger">{connection.data.last_error}</p>
@@ -134,46 +164,62 @@ export function SettingsPage() {
       </div>
 
       <div>
-        <h2 className="font-display text-2xl">Журнал синка</h2>
-        <div className="mt-4 overflow-x-auto border border-line">
-          <table className="w-full min-w-[40rem] text-left text-sm">
-            <thead className="bg-paper-2 text-moss">
-              <tr>
-                <th className="px-3 py-2 font-normal">Когда</th>
-                <th className="px-3 py-2 font-normal">Источник</th>
-                <th className="px-3 py-2 font-normal">Статус</th>
-                <th className="px-3 py-2 font-normal">Счета</th>
-                <th className="px-3 py-2 font-normal">Операции</th>
-                <th className="px-3 py-2 font-normal">Позиции</th>
-              </tr>
-            </thead>
-            <tbody>
-              {(runs.data ?? []).length === 0 ? (
+        <h2 className="text-xl sm:text-2xl font-bold tracking-tight text-slate-900">Журнал синка</h2>
+        <div className="mt-4 rounded-3xl border border-slate-200/90 bg-[#F1F5F4] p-1.5 shadow-xs">
+          <div className="overflow-x-auto rounded-[1.3rem]">
+            <table className="w-full min-w-[40rem] text-left text-sm">
+              <thead className="bg-[#E2EAE7] text-xs font-semibold uppercase tracking-wider text-slate-600">
                 <tr>
-                  <td className="px-3 py-3 text-moss" colSpan={6}>
-                    Пока пусто. Сохраните токен и нажмите «Обновить».
-                  </td>
+                  <th className="px-4 py-3">Когда</th>
+                  <th className="px-4 py-3">Источник</th>
+                  <th className="px-4 py-3">Статус</th>
+                  <th className="px-4 py-3">Счета</th>
+                  <th className="px-4 py-3">Операции</th>
+                  <th className="px-4 py-3">Позиции</th>
                 </tr>
-              ) : (
-                (runs.data ?? []).map((run) => (
-                  <tr key={run.id} className="border-t border-line align-top">
-                    <td className="px-3 py-2">{formatWhen(run.started_at)}</td>
-                    <td className="px-3 py-2">{run.trigger === "schedule" ? "расписание" : "вручную"}</td>
-                    <td className="px-3 py-2">
-                      {statusLabel(run.status)}
-                      {run.error_message ? (
-                        <p className="mt-1 text-xs text-danger">{run.error_message}</p>
-                      ) : null}
-                      {run.notes ? <p className="mt-1 whitespace-pre-wrap text-xs text-moss">{run.notes}</p> : null}
+              </thead>
+              <tbody className="divide-y divide-slate-200/60 bg-transparent text-slate-800">
+                {(runs.data ?? []).length === 0 ? (
+                  <tr>
+                    <td className="px-4 py-6 text-center text-slate-500" colSpan={6}>
+                      Пока пусто. Сохраните токен и нажмите «Обновить».
                     </td>
-                    <td className="px-3 py-2">{run.accounts_count}</td>
-                    <td className="px-3 py-2">{run.operations_count}</td>
-                    <td className="px-3 py-2">{run.positions_count}</td>
                   </tr>
-                ))
-              )}
-            </tbody>
-          </table>
+                ) : (
+                  (runs.data ?? []).map((run) => (
+                    <tr key={run.id} className="align-top hover:bg-emerald-500/5 transition-colors duration-150">
+                      <td className="px-4 py-3 whitespace-nowrap text-slate-600">{formatWhen(run.started_at)}</td>
+                      <td className="px-4 py-3">
+                        <span className="inline-flex rounded-full bg-slate-200/70 px-2.5 py-0.5 text-xs font-medium text-slate-700">
+                          {run.trigger === "schedule" ? "расписание" : "вручную"}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3">
+                        <span
+                          className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium ${
+                            run.status === "ok"
+                              ? "bg-emerald-100 text-emerald-800"
+                              : run.status === "running"
+                                ? "bg-blue-100 text-blue-800"
+                                : "bg-red-100 text-red-800"
+                          }`}
+                        >
+                          {statusLabel(run.status)}
+                        </span>
+                        {run.error_message ? (
+                          <p className="mt-1 text-xs text-danger">{run.error_message}</p>
+                        ) : null}
+                        {run.notes ? <p className="mt-1 whitespace-pre-wrap text-xs text-slate-500">{run.notes}</p> : null}
+                      </td>
+                      <td className="px-4 py-3 whitespace-nowrap tabular-nums text-slate-700">{run.accounts_count}</td>
+                      <td className="px-4 py-3 whitespace-nowrap tabular-nums text-slate-700">{run.operations_count}</td>
+                      <td className="px-4 py-3 whitespace-nowrap tabular-nums text-slate-700">{run.positions_count}</td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
         </div>
       </div>
     </section>

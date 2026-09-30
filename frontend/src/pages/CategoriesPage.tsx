@@ -18,7 +18,7 @@ function formatMoney(value: string | undefined): string {
   return `${parsed.toLocaleString("ru-RU", {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
-  })} ₽`;
+  })}\u00A0₽`;
 }
 
 function formatShare(value: string): string {
@@ -58,7 +58,7 @@ function PnlHint({ pnl, pnlPercent }: { pnl: string; pnlPercent: string | null }
 function deltaClass(value: string): string {
   const parsed = Number(value);
   if (Number.isNaN(parsed) || Math.abs(parsed) < 0.05) {
-    return "text-moss";
+    return "text-slate-500";
   }
   return parsed > 0 ? "text-gain" : "text-danger";
 }
@@ -134,8 +134,8 @@ export function CategoriesPage() {
   return (
     <section className="space-y-8">
       <div>
-        <h1 className="font-display text-3xl">Категории</h1>
-        <p className="mt-2 max-w-2xl text-sm text-moss">
+        <h1 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-slate-900">Категории</h1>
+        <p className="mt-2 max-w-2xl text-sm text-slate-600">
           Целевые доли считаются от стоимости всего портфеля. Факт папки включает бумаги в ней и во
           вложенных. Вложенная цель не вычитается из родительской.
         </p>
@@ -148,116 +148,135 @@ export function CategoriesPage() {
       ) : null}
 
       <div className="grid gap-4 sm:grid-cols-3">
-        <article className="border border-line bg-paper-2/40 p-5">
-          <p className="text-xs uppercase tracking-[0.16em] text-moss">Портфель</p>
-          <p className="mt-3 font-display text-3xl">{formatMoney(data?.portfolio_value)}</p>
+        <article className="rounded-3xl border border-emerald-500/15 bg-white p-6 shadow-sm transition-all duration-200 hover:shadow-md hover:border-emerald-500/30">
+          <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">Портфель</p>
+          <p className="mt-2 text-2xl sm:text-3xl font-extrabold tracking-tight text-slate-900 whitespace-nowrap tabular-nums">
+            {formatMoney(data?.portfolio_value)}
+          </p>
+          <p className="mt-2 text-xs text-slate-500">Общая стоимость всех активов</p>
         </article>
-        <article className="border border-line bg-paper-2/40 p-5">
-          <p className="text-xs uppercase tracking-[0.16em] text-moss">Цели корня</p>
-          <p className="mt-3 font-display text-3xl">{data ? formatShare(data.root_target) : "—"}</p>
-          <p className="mt-2 text-xs text-moss">Сумма целевых долей корневых папок</p>
+        <article className="rounded-3xl border border-emerald-500/15 bg-white p-6 shadow-sm transition-all duration-200 hover:shadow-md hover:border-emerald-500/30">
+          <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">Цели корня</p>
+          <p className="mt-2 text-2xl sm:text-3xl font-extrabold tracking-tight text-slate-900 whitespace-nowrap tabular-nums">
+            {data ? formatShare(data.root_target) : "—"}
+          </p>
+          <p className="mt-2 text-xs text-slate-500">Сумма целевых долей корневых папок</p>
         </article>
-        <article className="border border-line bg-paper-2/40 p-5">
-          <p className="text-xs uppercase tracking-[0.16em] text-moss">Без категории</p>
-          <p className="mt-3 font-display text-3xl">{formatMoney(data?.unassigned_value)}</p>
-          <p className="mt-2 text-xs text-moss">
-            {data ? formatShare(data.unassigned_share) : "—"} стоимости
+        <article className="rounded-3xl border border-emerald-500/15 bg-white p-6 shadow-sm transition-all duration-200 hover:shadow-md hover:border-emerald-500/30">
+          <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">Без категории</p>
+          <p className="mt-2 text-2xl sm:text-3xl font-extrabold tracking-tight text-slate-900 whitespace-nowrap tabular-nums">
+            {formatMoney(data?.unassigned_value)}
+          </p>
+          <p className="mt-2 text-xs text-slate-500">
+            {data ? formatShare(data.unassigned_share) : "—"} от стоимости портфеля
           </p>
         </article>
       </div>
 
       <div>
-        <h2 className="font-display text-2xl">Факт vs план</h2>
-        <div className="mt-3 overflow-x-auto border border-line">
-          <table className="w-full min-w-[48rem] text-left text-sm">
-            <thead className="bg-paper-2 text-moss">
-              <tr>
-                <th className="px-3 py-2 font-normal">Папка</th>
-                <th className="px-3 py-2 font-normal">Факт</th>
-                <th className="px-3 py-2 font-normal">Цель</th>
-                <th className="px-3 py-2 font-normal">Δ</th>
-                <th className="px-3 py-2 font-normal">Стоимость</th>
-              </tr>
-            </thead>
-            <tbody>
-              {flat.length === 0 ? (
+        <h2 className="text-xl sm:text-2xl font-bold tracking-tight text-slate-900">Факт vs план</h2>
+        <div className="mt-4 rounded-3xl border border-slate-200/90 bg-[#F1F5F4] p-1.5 shadow-xs">
+          <div className="overflow-x-auto rounded-[1.3rem]">
+            <table className="w-full min-w-[48rem] text-left text-sm">
+              <thead className="bg-[#E2EAE7] text-xs font-semibold uppercase tracking-wider text-slate-600">
                 <tr>
-                  <td className="px-3 py-3 text-moss" colSpan={5}>
-                    Пока нет папок. Добавьте первую ниже.
-                  </td>
+                  <th className="px-4 py-3">Папка</th>
+                  <th className="px-4 py-3">Факт</th>
+                  <th className="px-4 py-3">Цель</th>
+                  <th className="px-4 py-3">Δ</th>
+                  <th className="px-4 py-3">Стоимость</th>
                 </tr>
-              ) : (
-                flat.map(({ node, depth }) => (
-                  <tr key={node.id} className="border-t border-line">
-                    <td className="px-3 py-2" style={{ paddingLeft: `${0.75 + depth * 1.1}rem` }}>
-                      {node.name}
-                    </td>
-                    <td className="px-3 py-2">
-                      <ShareBar fact={node.fact_share} target={node.target_share} />
-                    </td>
-                    <td className="px-3 py-2">{formatShare(node.target_share)}</td>
-                    <td className={`px-3 py-2 ${deltaClass(node.delta_share)}`}>
-                      {Number(node.delta_share) > 0 ? "+" : ""}
-                      {formatShare(node.delta_share)}
-                    </td>
-                    <td className="px-3 py-2">
-                      {formatMoney(node.value)}
-                      <PnlHint pnl={node.pnl} pnlPercent={node.pnl_percent} />
+              </thead>
+              <tbody className="divide-y divide-slate-200/60 bg-transparent text-slate-800">
+                {flat.length === 0 ? (
+                  <tr>
+                    <td className="px-4 py-6 text-center text-slate-500" colSpan={5}>
+                      Пока нет папок. Добавьте первую ниже.
                     </td>
                   </tr>
-                ))
-              )}
-              {data && Number(data.unassigned_value) > 0 ? (
-                <tr className="border-t border-line">
-                  <td className="px-3 py-2 text-moss">Без категории</td>
-                  <td className="px-3 py-2">
-                    <ShareBar fact={data.unassigned_share} target="0" />
-                  </td>
-                  <td className="px-3 py-2 text-moss">—</td>
-                  <td className="px-3 py-2 text-moss">{formatShare(data.unassigned_share)}</td>
-                  <td className="px-3 py-2">
-                    {formatMoney(data.unassigned_value)}
-                    <PnlHint pnl={data.unassigned_pnl} pnlPercent={data.unassigned_pnl_percent} />
-                  </td>
-                </tr>
-              ) : null}
-            </tbody>
-          </table>
+                ) : (
+                  flat.map(({ node, depth }) => (
+                    <tr key={node.id} className="hover:bg-emerald-500/5 transition-colors duration-150">
+                      <td className="px-4 py-3 font-medium text-slate-900" style={{ paddingLeft: `${1 + depth * 1.25}rem` }}>
+                        <span className="inline-flex items-center gap-2">
+                          {depth > 0 ? <span className="text-slate-400">└─</span> : null}
+                          {node.name}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3">
+                        <ShareBar fact={node.fact_share} target={node.target_share} />
+                      </td>
+                      <td className="px-4 py-3 font-semibold text-slate-700">{formatShare(node.target_share)}</td>
+                      <td className={`px-4 py-3 font-semibold ${deltaClass(node.delta_share)}`}>
+                        {Number(node.delta_share) > 0 ? "+" : ""}
+                        {formatShare(node.delta_share)}
+                      </td>
+                      <td className="px-4 py-3 whitespace-nowrap tabular-nums font-medium text-slate-900">
+                        {formatMoney(node.value)}
+                        <PnlHint pnl={node.pnl} pnlPercent={node.pnl_percent} />
+                      </td>
+                    </tr>
+                  ))
+                )}
+                {data && Number(data.unassigned_value) > 0 ? (
+                  <tr className="hover:bg-emerald-500/5 transition-colors duration-150 font-medium text-slate-600">
+                    <td className="px-4 py-3 text-slate-500">Без категории</td>
+                    <td className="px-4 py-3">
+                      <ShareBar fact={data.unassigned_share} target="0" />
+                    </td>
+                    <td className="px-4 py-3 text-slate-400">—</td>
+                    <td className="px-4 py-3 text-slate-500">{formatShare(data.unassigned_share)}</td>
+                    <td className="px-4 py-3 whitespace-nowrap tabular-nums text-slate-900">
+                      {formatMoney(data.unassigned_value)}
+                      <PnlHint pnl={data.unassigned_pnl} pnlPercent={data.unassigned_pnl_percent} />
+                    </td>
+                  </tr>
+                ) : null}
+              </tbody>
+            </table>
+          </div>
         </div>
       </div>
 
-      <form className="max-w-xl space-y-3 border border-line bg-paper-2/40 p-5" onSubmit={onCreate}>
-        <h2 className="font-display text-2xl">Новая папка</h2>
-        <label className="block text-sm">
-          Название
+      <form className="max-w-xl space-y-4 rounded-3xl border border-emerald-500/15 bg-white p-6 sm:p-7 shadow-sm transition-all duration-200" onSubmit={onCreate}>
+        <h2 className="text-xl sm:text-2xl font-bold tracking-tight text-slate-900">Новая папка</h2>
+        <label className="block">
+          <span className="block text-xs font-semibold uppercase tracking-wider text-slate-600 mb-1.5">
+            Название
+          </span>
           <input
-            className="mt-1 w-full border border-line bg-paper px-3 py-2 outline-none focus:border-forest"
+            className="w-full rounded-2xl border border-slate-200 bg-slate-50/60 px-4 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 outline-none transition-all duration-200 hover:border-emerald-400/50 focus:border-emerald-500 focus:bg-white focus:ring-4 focus:ring-emerald-500/10"
+            placeholder="Например, Акции РФ или Дивидендные"
             value={name}
             onChange={(event) => setName(event.target.value)}
             required
           />
         </label>
         <div className="grid gap-3 sm:grid-cols-2">
-          <label className="block text-sm">
-            Цель, %
+          <label className="block">
+            <span className="block text-xs font-semibold uppercase tracking-wider text-slate-600 mb-1.5">
+              Цель, %
+            </span>
             <input
               type="number"
               min={0}
               max={100}
               step="0.1"
-              className="mt-1 w-full border border-line bg-paper px-3 py-2 outline-none focus:border-forest"
+              className="w-full rounded-2xl border border-slate-200 bg-slate-50/60 px-4 py-2.5 text-sm text-slate-900 outline-none transition-all duration-200 hover:border-emerald-400/50 focus:border-emerald-500 focus:bg-white focus:ring-4 focus:ring-emerald-500/10"
               value={target}
               onChange={(event) => setTarget(event.target.value)}
             />
           </label>
-          <label className="block text-sm">
-            Родитель
+          <label className="block">
+            <span className="block text-xs font-semibold uppercase tracking-wider text-slate-600 mb-1.5">
+              Родитель
+            </span>
             <select
-              className="mt-1 w-full border border-line bg-paper px-3 py-2 outline-none focus:border-forest"
+              className="w-full rounded-2xl border border-slate-200 bg-slate-50/60 px-4 py-2.5 text-sm text-slate-900 outline-none transition-all duration-200 hover:border-emerald-400/50 focus:border-emerald-500 focus:bg-white focus:ring-4 focus:ring-emerald-500/10 cursor-pointer"
               value={parentId}
               onChange={(event) => setParentId(event.target.value)}
             >
-              <option value="">Корень</option>
+              <option value="">Корень (без родителя)</option>
               {flat.map(({ node, depth }) => (
                 <option key={node.id} value={node.id}>
                   {"— ".repeat(depth)}
@@ -275,16 +294,16 @@ export function CategoriesPage() {
         <button
           type="submit"
           disabled={createMutation.isPending}
-          className="bg-forest px-4 py-2 text-sm text-paper hover:bg-forest-2 disabled:opacity-60"
+          className="inline-flex items-center gap-2 rounded-full bg-emerald-600 hover:bg-emerald-700 text-white px-6 py-2.5 text-sm font-semibold shadow-sm shadow-emerald-600/20 transition-all duration-200 active:scale-95 disabled:opacity-50 cursor-pointer"
         >
           {createMutation.isPending ? "Добавляем…" : "Добавить папку"}
         </button>
       </form>
 
       <div className="space-y-4">
-        <h2 className="font-display text-2xl">Папки и бумаги</h2>
+        <h2 className="text-xl sm:text-2xl font-bold tracking-tight text-slate-900">Папки и бумаги</h2>
         {flat.length === 0 ? (
-          <p className="text-sm text-moss">Дерево пустое.</p>
+          <p className="text-sm text-slate-500">Дерево пустое.</p>
         ) : (
           flat.map(({ node, depth }) => (
             <CategoryEditor
@@ -326,53 +345,57 @@ export function CategoriesPage() {
       </div>
 
       <div>
-        <h2 className="font-display text-2xl">Без категории</h2>
-        <ul className="mt-3 space-y-2">
+        <h2 className="text-xl sm:text-2xl font-bold tracking-tight text-slate-900">Без категории</h2>
+        <div className="mt-4 rounded-3xl border border-slate-200/80 bg-white p-5 sm:p-6 shadow-xs">
           {(data?.unassigned ?? []).length === 0 ? (
-            <li className="text-sm text-moss">Все бумаги распределены по папкам.</li>
+            <p className="text-sm text-slate-500">Все бумаги распределены по папкам.</p>
           ) : (
-            (data?.unassigned ?? []).map((item) => (
-              <li
-                key={item.figi}
-                className="flex flex-wrap items-center justify-between gap-3 border border-line bg-paper-2/30 px-4 py-3 text-sm"
-              >
-                <div>
-                  <p>
-                    {item.ticker}
-                    {item.is_cash ? (
-                      <span className="ml-2 text-xs uppercase tracking-wide text-moss">кэш</span>
-                    ) : null}
-                  </p>
-                  <p className="text-xs text-moss">{item.name}</p>
-                </div>
-                <div className="flex items-center gap-3">
-                  <span>{formatMoney(item.value)}</span>
-                  <select
-                    className="border border-line bg-paper px-2 py-1 text-sm outline-none focus:border-forest"
-                    defaultValue=""
-                    disabled={assignMutation.isPending || flat.length === 0}
-                    onChange={(event) => {
-                      const value = event.target.value;
-                      if (!value) {
-                        return;
-                      }
-                      assignMutation.mutate({ figi: item.figi, categoryId: Number(value) });
-                      event.target.value = "";
-                    }}
-                  >
-                    <option value="">{flat.length === 0 ? "Сначала папка" : "В папку"}</option>
-                    {flat.map(({ node, depth }) => (
-                      <option key={node.id} value={node.id}>
-                        {"— ".repeat(depth)}
-                        {node.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </li>
-            ))
+            <ul className="space-y-2.5">
+              {(data?.unassigned ?? []).map((item) => (
+                <li
+                  key={item.figi}
+                  className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-100 bg-[#F8FAFA] px-4 py-3 text-sm transition-colors hover:bg-emerald-50/40 hover:border-emerald-200/50"
+                >
+                  <div>
+                    <p className="font-semibold text-slate-900">
+                      {item.ticker}
+                      {item.is_cash ? (
+                        <span className="ml-2 rounded-full bg-slate-200/80 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-600">
+                          кэш
+                        </span>
+                      ) : null}
+                    </p>
+                    <p className="text-xs text-slate-500">{item.name}</p>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <span className="font-semibold whitespace-nowrap tabular-nums text-slate-900">{formatMoney(item.value)}</span>
+                    <select
+                      className="rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-800 outline-none hover:border-emerald-400/50 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/10 cursor-pointer disabled:opacity-50"
+                      defaultValue=""
+                      disabled={assignMutation.isPending || flat.length === 0}
+                      onChange={(event) => {
+                        const value = event.target.value;
+                        if (!value) {
+                          return;
+                        }
+                        assignMutation.mutate({ figi: item.figi, categoryId: Number(value) });
+                        event.target.value = "";
+                      }}
+                    >
+                      <option value="">{flat.length === 0 ? "Сначала папка" : "В папку…"}</option>
+                      {flat.map(({ node, depth }) => (
+                        <option key={node.id} value={node.id}>
+                          {"— ".repeat(depth)}
+                          {node.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </li>
+              ))}
+            </ul>
           )}
-        </ul>
+        </div>
       </div>
     </section>
   );
@@ -382,20 +405,21 @@ function ShareBar({ fact, target }: { fact: string; target: string }) {
   const factNum = Math.max(0, Number(fact) || 0);
   const targetNum = Math.max(0, Number(target) || 0);
   return (
-    <div className="min-w-[8rem]">
-      <div className="relative h-2 bg-paper-2">
+    <div className="min-w-[8rem] max-w-[12rem]">
+      <div className="relative h-2.5 rounded-full bg-slate-200/80 overflow-hidden">
         <div
-          className="absolute inset-y-0 left-0 bg-forest"
+          className="absolute inset-y-0 left-0 rounded-full bg-emerald-600 transition-all duration-300"
           style={{ width: `${Math.min(factNum, 100)}%` }}
         />
         {targetNum > 0 ? (
           <span
-            className="absolute top-[-3px] h-3.5 w-px bg-ink"
+            className="absolute top-0 bottom-0 w-0.5 bg-slate-900 z-10"
             style={{ left: `${Math.min(targetNum, 100)}%` }}
+            title={`Цель: ${targetNum}%`}
           />
         ) : null}
       </div>
-      <p className="mt-1 text-xs text-moss">{formatShare(fact)}</p>
+      <p className="mt-1 text-xs font-medium text-slate-500">{formatShare(fact)}</p>
     </div>
   );
 }
@@ -424,14 +448,16 @@ function CategoryEditor({
 
   return (
     <article
-      className="space-y-3 border border-line bg-paper-2/30 p-4"
-      style={{ marginLeft: `${depth * 1.25}rem` }}
+      className="space-y-4 rounded-3xl border border-slate-200/80 bg-white p-5 sm:p-6 shadow-xs transition-all duration-200 hover:border-emerald-500/20 hover:shadow-sm"
+      style={{ marginLeft: `${depth * 1.5}rem` }}
     >
       <div className="flex flex-wrap items-end gap-3">
         <label className="min-w-[12rem] flex-1 text-sm">
-          Название
+          <span className="block text-xs font-semibold uppercase tracking-wider text-slate-500 mb-1">
+            Название папки
+          </span>
           <input
-            className="mt-1 w-full border border-line bg-paper px-3 py-2 outline-none focus:border-forest"
+            className="w-full rounded-2xl border border-slate-200 bg-slate-50/60 px-3.5 py-2 text-sm text-slate-900 outline-none transition-all duration-200 hover:border-emerald-400/50 focus:border-emerald-500 focus:bg-white focus:ring-4 focus:ring-emerald-500/10"
             value={name}
             onChange={(event) => setName(event.target.value)}
             onBlur={() => {
@@ -442,13 +468,15 @@ function CategoryEditor({
           />
         </label>
         <label className="w-28 text-sm">
-          Цель, %
+          <span className="block text-xs font-semibold uppercase tracking-wider text-slate-500 mb-1">
+            Цель, %
+          </span>
           <input
             type="number"
             min={0}
             max={100}
             step="0.1"
-            className="mt-1 w-full border border-line bg-paper px-3 py-2 outline-none focus:border-forest"
+            className="w-full rounded-2xl border border-slate-200 bg-slate-50/60 px-3.5 py-2 text-sm text-slate-900 outline-none transition-all duration-200 hover:border-emerald-400/50 focus:border-emerald-500 focus:bg-white focus:ring-4 focus:ring-emerald-500/10"
             value={target}
             onChange={(event) => setTarget(event.target.value)}
             onBlur={() => {
@@ -463,55 +491,71 @@ function CategoryEditor({
           type="button"
           disabled={busy}
           onClick={onDelete}
-          className="border border-line bg-paper px-3 py-2 text-sm text-danger hover:border-danger disabled:opacity-60"
+          className="rounded-full border border-red-200 bg-red-50/70 px-4 py-2 text-sm font-semibold text-red-600 transition-all duration-200 hover:bg-red-100 hover:border-red-300 active:scale-95 disabled:opacity-50 cursor-pointer"
         >
           Удалить
         </button>
       </div>
-      <ul className="space-y-1 text-sm">
-        {node.holdings.length === 0 ? (
-          <li className="text-moss">В папке пока нет бумаг.</li>
-        ) : (
-          node.holdings.map((item) => (
-            <li key={item.figi} className="flex flex-wrap items-center justify-between gap-2">
-              <span>
-                {item.ticker}
-                {item.is_cash ? <span className="ml-2 text-xs text-moss">кэш</span> : null}
-                <span className="text-moss"> · {formatMoney(item.value)}</span>
-              </span>
-              <button
-                type="button"
-                disabled={busy}
-                className="text-xs text-moss hover:text-forest disabled:opacity-60"
-                onClick={() => onAssign(item.figi, null)}
+
+      <div className="border-t border-slate-100 pt-3">
+        <p className="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">
+          Бумаги в папке ({node.holdings.length})
+        </p>
+        <ul className="space-y-1.5 text-sm">
+          {node.holdings.length === 0 ? (
+            <li className="text-slate-400 italic text-xs py-1">В папке пока нет бумаг.</li>
+          ) : (
+            node.holdings.map((item) => (
+              <li
+                key={item.figi}
+                className="flex flex-wrap items-center justify-between gap-2 rounded-xl bg-slate-50/80 px-3 py-2 transition-colors hover:bg-emerald-50/40"
               >
-                убрать
-              </button>
-            </li>
-          ))
-        )}
-      </ul>
+                <div className="flex items-center gap-2">
+                  <span className="font-semibold text-slate-800">{item.ticker}</span>
+                  {item.is_cash ? (
+                    <span className="rounded-full bg-slate-200/80 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-600">
+                      кэш
+                    </span>
+                  ) : null}
+                  <span className="text-slate-500">· {formatMoney(item.value)}</span>
+                </div>
+                <button
+                  type="button"
+                  disabled={busy}
+                  className="rounded-full border border-slate-200 bg-white px-2.5 py-0.5 text-xs font-medium text-slate-500 hover:border-red-200 hover:bg-red-50 hover:text-red-600 transition-all duration-150 disabled:opacity-50 cursor-pointer"
+                  onClick={() => onAssign(item.figi, null)}
+                >
+                  убрать
+                </button>
+              </li>
+            ))
+          )}
+        </ul>
+      </div>
+
       {unassigned.length > 0 ? (
-        <select
-          className="border border-line bg-paper px-2 py-1 text-sm outline-none focus:border-forest"
-          defaultValue=""
-          disabled={busy}
-          onChange={(event) => {
-            const value = event.target.value;
-            if (!value) {
-              return;
-            }
-            onAssign(value, node.id);
-            event.target.value = "";
-          }}
-        >
-          <option value="">Добавить бумагу</option>
-          {unassigned.map((item) => (
-            <option key={item.figi} value={item.figi}>
-              {item.ticker} · {item.name}
-            </option>
-          ))}
-        </select>
+        <div className="pt-1">
+          <select
+            className="w-full max-w-sm rounded-2xl border border-slate-200 bg-slate-50/60 px-3.5 py-2 text-sm text-slate-800 outline-none transition-all duration-200 hover:border-emerald-400/50 focus:border-emerald-500 focus:bg-white focus:ring-4 focus:ring-emerald-500/10 cursor-pointer"
+            defaultValue=""
+            disabled={busy}
+            onChange={(event) => {
+              const value = event.target.value;
+              if (!value) {
+                return;
+              }
+              onAssign(value, node.id);
+              event.target.value = "";
+            }}
+          >
+            <option value="">+ Добавить бумагу в папку</option>
+            {unassigned.map((item) => (
+              <option key={item.figi} value={item.figi}>
+                {item.ticker} · {item.name}
+              </option>
+            ))}
+          </select>
+        </div>
       ) : null}
     </article>
   );

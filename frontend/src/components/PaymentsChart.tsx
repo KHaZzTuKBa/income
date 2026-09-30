@@ -86,15 +86,17 @@ export function PaymentsChart({ enabled }: { enabled: boolean }) {
   return (
     <div>
       <div className="flex flex-wrap items-end justify-between gap-3">
-        <h2 className="font-display text-2xl">Выплаты во времени</h2>
-        <div className="flex flex-wrap items-center gap-2">
+        <h2 className="text-xl sm:text-2xl font-bold tracking-tight text-slate-900">Выплаты во времени</h2>
+        <div className="flex flex-wrap items-center gap-1.5 rounded-full border border-emerald-500/15 bg-emerald-500/[0.04] p-1 backdrop-blur-sm">
           {PERIODS.map((item) => (
             <button
               key={item.id}
               type="button"
               onClick={() => setPeriod(item.id)}
-              className={`border px-3 py-1 text-xs ${
-                period === item.id ? "border-forest text-forest" : "border-line text-moss hover:border-forest"
+              className={`rounded-full px-3 py-1 text-xs font-semibold transition-all duration-200 ${
+                period === item.id
+                  ? "bg-white text-emerald-950 shadow-xs"
+                  : "text-slate-600 hover:text-emerald-900"
               }`}
             >
               {item.label}
@@ -103,10 +105,10 @@ export function PaymentsChart({ enabled }: { enabled: boolean }) {
         </div>
       </div>
       {period === "year" ? (
-        <label className="mt-3 flex items-center gap-2 text-sm text-moss">
+        <label className="mt-3 flex items-center gap-2 text-sm text-slate-600">
           Год
           <select
-            className="border border-line bg-paper px-2 py-1 text-ink"
+            className="rounded-xl border border-emerald-500/20 bg-white px-3 py-1 text-slate-800 text-sm shadow-xs"
             value={year}
             onChange={(event) => setYear(Number(event.target.value))}
           >
@@ -119,12 +121,12 @@ export function PaymentsChart({ enabled }: { enabled: boolean }) {
         </label>
       ) : null}
       {period === "custom" ? (
-        <div className="mt-3 flex flex-wrap gap-3 text-sm text-moss">
+        <div className="mt-3 flex flex-wrap gap-3 text-sm text-slate-600">
           <label className="flex items-center gap-2">
             С
             <input
               type="date"
-              className="border border-line bg-paper px-2 py-1 text-ink"
+              className="rounded-xl border border-emerald-500/20 bg-white px-2.5 py-1 text-slate-800 shadow-xs"
               value={custom.from}
               onChange={(event) => setCustom((prev) => ({ ...prev, from: event.target.value }))}
             />
@@ -133,7 +135,7 @@ export function PaymentsChart({ enabled }: { enabled: boolean }) {
             По
             <input
               type="date"
-              className="border border-line bg-paper px-2 py-1 text-ink"
+              className="rounded-xl border border-emerald-500/20 bg-white px-2.5 py-1 text-slate-800 shadow-xs"
               value={custom.to}
               onChange={(event) => setCustom((prev) => ({ ...prev, to: event.target.value }))}
             />
@@ -145,17 +147,17 @@ export function PaymentsChart({ enabled }: { enabled: boolean }) {
           {payments.error instanceof Error ? payments.error.message : "Не удалось загрузить график выплат"}
         </p>
       ) : null}
-      <div className="mt-4">
+      <div className="mt-5">
         {payments.isLoading && points.length === 0 ? (
-          <div className="border border-line bg-paper-2/30 p-4">
-            <p className="text-sm text-moss">Загружаем выплаты…</p>
+          <div className="rounded-3xl border border-emerald-500/15 bg-white p-6 shadow-sm">
+            <p className="text-sm text-slate-500">Загружаем выплаты…</p>
           </div>
         ) : points.length === 0 ? (
-          <div className="border border-line bg-paper-2/30 p-4">
-            <p className="text-sm text-moss">Нет выплат за выбранный период.</p>
+          <div className="rounded-3xl border border-emerald-500/15 bg-white p-6 shadow-sm">
+            <p className="text-sm text-slate-500">Нет выплат за выбранный период.</p>
           </div>
         ) : (
-          <article className="border border-line bg-paper-2/30 p-4">
+          <article className="rounded-3xl border border-emerald-500/15 bg-white p-6 sm:p-7 shadow-[0_4px_24px_-4px_rgba(16,185,129,0.06),0_2px_8px_-2px_rgba(0,0,0,0.02)]">
             <PaymentBarChart points={points} granularity={granularity} total={total} />
           </article>
         )}
@@ -176,7 +178,7 @@ function PaymentBarChart({
   const [hover, setHover] = useState<number | null>(null);
   const values = points.map((item) => num(item.amount));
   const width = 720;
-  const height = 260;
+  const height = 240;
   const pad = { top: 16, right: 16, bottom: 36, left: 64 };
   const innerW = width - pad.left - pad.right;
   const innerH = height - pad.top - pad.bottom;
@@ -198,12 +200,12 @@ function PaymentBarChart({
     <div>
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <p className="font-display text-2xl">{formatMoneyExact(activeAmount)}</p>
-          <p className="text-xs text-moss">{active ? formatBucket(active.day, granularity) : ""}</p>
+          <p className="text-2xl font-extrabold tracking-tight text-slate-900">{formatMoneyExact(activeAmount)}</p>
+          <p className="text-xs font-medium text-slate-400">{active ? formatBucket(active.day, granularity) : ""}</p>
         </div>
         <div className="text-right">
-          <p className="text-xs uppercase tracking-[0.16em] text-moss">Всего за период</p>
-          <p className="mt-1 font-display text-xl">{formatMoney(total)}</p>
+          <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">Всего за период</p>
+          <p className="mt-0.5 text-xl font-bold tracking-tight text-slate-900">{formatMoney(total)}</p>
         </div>
       </div>
       <svg
@@ -218,8 +220,8 @@ function PaymentBarChart({
           const pos = y(value);
           return (
             <g key={index}>
-              <line x1={pad.left} x2={width - pad.right} y1={pos} y2={pos} stroke="#d4ccb8" strokeWidth="1" />
-              <text x={pad.left - 8} y={pos + 4} textAnchor="end" className="fill-moss" fontSize="10">
+              <line x1={pad.left} x2={width - pad.right} y1={pos} y2={pos} stroke="#f1f5f9" strokeWidth="1" />
+              <text x={pad.left - 8} y={pos + 4} textAnchor="end" fill="#94a3b8" fontSize="10" fontWeight="500">
                 {formatMoney(value)}
               </text>
             </g>
@@ -228,6 +230,7 @@ function PaymentBarChart({
         {points.map((item, index) => {
           const top = y(Math.max(values[index], 0));
           const barHeight = Math.max(values[index] > 0 ? 1 : 0, Math.abs(zero - top));
+          const isHovered = index === activeIndex;
           return (
             <rect
               key={item.day}
@@ -235,7 +238,9 @@ function PaymentBarChart({
               y={Math.min(top, zero)}
               width={barW}
               height={barHeight}
-              fill={index === activeIndex ? "#163628" : "#1f4a38"}
+              rx="2"
+              fill={isHovered ? "#6d28d9" : "#7c3aed"}
+              className="transition-colors duration-150"
             />
           );
         })}
@@ -246,8 +251,9 @@ function PaymentBarChart({
               x={x(index) + barW / 2}
               y={height - 8}
               textAnchor="middle"
-              className="fill-moss"
+              fill="#94a3b8"
               fontSize="10"
+              fontWeight="500"
             >
               {formatBucket(item.day, granularity)}
             </text>
@@ -267,10 +273,10 @@ function PaymentBarChart({
           />
         ))}
       </svg>
-      <p className="mt-2 text-xs text-moss">
-        <span className="mr-1 inline-block h-2 w-4 bg-forest align-middle" />
-        полученные дивиденды и купоны
-      </p>
+      <div className="mt-3 flex items-center gap-1.5 text-xs font-medium text-slate-500">
+        <span className="h-2.5 w-3.5 rounded-xs bg-[#7c3aed]" />
+        <span>полученные дивиденды и купоны</span>
+      </div>
     </div>
   );
 }

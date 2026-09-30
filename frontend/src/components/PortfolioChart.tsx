@@ -108,15 +108,17 @@ export function PortfolioCharts({ enabled }: { enabled: boolean }) {
   return (
     <div>
       <div className="flex flex-wrap items-end justify-between gap-3">
-        <h2 className="font-display text-2xl">Стоимость во времени</h2>
-        <div className="flex flex-wrap items-center gap-2">
+        <h2 className="text-xl sm:text-2xl font-bold tracking-tight text-slate-900">Стоимость во времени</h2>
+        <div className="flex flex-wrap items-center gap-1.5 rounded-full border border-emerald-500/15 bg-emerald-500/[0.04] p-1 backdrop-blur-sm">
           {PERIODS.map((item) => (
             <button
               key={item.id}
               type="button"
               onClick={() => setPeriod(item.id)}
-              className={`border px-3 py-1 text-xs ${
-                period === item.id ? "border-forest text-forest" : "border-line text-moss hover:border-forest"
+              className={`rounded-full px-3 py-1 text-xs font-semibold transition-all duration-200 ${
+                period === item.id
+                  ? "bg-white text-emerald-950 shadow-xs"
+                  : "text-slate-600 hover:text-emerald-900"
               }`}
             >
               {item.label}
@@ -125,10 +127,10 @@ export function PortfolioCharts({ enabled }: { enabled: boolean }) {
         </div>
       </div>
       {period === "year" ? (
-        <label className="mt-3 flex items-center gap-2 text-sm text-moss">
+        <label className="mt-3 flex items-center gap-2 text-sm text-slate-600">
           Год
           <select
-            className="border border-line bg-paper px-2 py-1 text-ink"
+            className="rounded-xl border border-emerald-500/20 bg-white px-3 py-1 text-slate-800 text-sm shadow-xs"
             value={year}
             onChange={(event) => setYear(Number(event.target.value))}
           >
@@ -141,12 +143,12 @@ export function PortfolioCharts({ enabled }: { enabled: boolean }) {
         </label>
       ) : null}
       {period === "custom" ? (
-        <div className="mt-3 flex flex-wrap gap-3 text-sm text-moss">
+        <div className="mt-3 flex flex-wrap gap-3 text-sm text-slate-600">
           <label className="flex items-center gap-2">
             С
             <input
               type="date"
-              className="border border-line bg-paper px-2 py-1 text-ink"
+              className="rounded-xl border border-emerald-500/20 bg-white px-2.5 py-1 text-slate-800 shadow-xs"
               value={custom.from}
               onChange={(event) => setCustom((prev) => ({ ...prev, from: event.target.value }))}
             />
@@ -155,7 +157,7 @@ export function PortfolioCharts({ enabled }: { enabled: boolean }) {
             По
             <input
               type="date"
-              className="border border-line bg-paper px-2 py-1 text-ink"
+              className="rounded-xl border border-emerald-500/20 bg-white px-2.5 py-1 text-slate-800 shadow-xs"
               value={custom.to}
               onChange={(event) => setCustom((prev) => ({ ...prev, to: event.target.value }))}
             />
@@ -167,10 +169,10 @@ export function PortfolioCharts({ enabled }: { enabled: boolean }) {
           {history.error instanceof Error ? history.error.message : "Не удалось загрузить график"}
         </p>
       ) : null}
-      <div className="mt-4 space-y-6">
+      <div className="mt-5 space-y-6">
         {series.length === 0 ? (
-          <div className="border border-line bg-paper-2/30 p-4">
-            <p className="text-sm text-moss">
+          <div className="rounded-3xl border border-emerald-500/15 bg-white p-6 shadow-sm">
+            <p className="text-sm text-slate-500">
               {building
                 ? "Строим историю стоимости по операциям и дневным ценам…"
                 : "График появится после обновления портфеля."}
@@ -178,7 +180,7 @@ export function PortfolioCharts({ enabled }: { enabled: boolean }) {
           </div>
         ) : (
           series.map((item) => (
-            <article key={item.account_id ?? "all"} className="border border-line bg-paper-2/30 p-4">
+            <article key={item.account_id ?? "all"} className="rounded-3xl border border-emerald-500/15 bg-white p-6 sm:p-7 shadow-[0_4px_24px_-4px_rgba(16,185,129,0.06),0_2px_8px_-2px_rgba(0,0,0,0.02)]">
               <ValueBarChart
                 title={item.account_name}
                 series={item}
@@ -261,9 +263,9 @@ function ValueBarChart({
     <div>
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h3 className="font-display text-xl">{title}</h3>
-          <p className="font-display text-2xl">{formatMoney(active.value)}</p>
-          <p className="text-xs text-moss">{formatBucket(active.day, granularity)}</p>
+          <h3 className="text-lg font-bold text-slate-900">{title}</h3>
+          <p className="text-2xl font-extrabold tracking-tight text-slate-900">{formatMoney(active.value)}</p>
+          <p className="text-xs font-medium text-slate-400">{formatBucket(active.day, granularity)}</p>
         </div>
       </div>
       <svg
@@ -278,8 +280,8 @@ function ValueBarChart({
           const pos = y(value);
           return (
             <g key={index}>
-              <line x1={pad.left} x2={width - pad.right} y1={pos} y2={pos} stroke="#d4ccb8" strokeWidth="1" />
-              <text x={pad.left - 8} y={pos + 4} textAnchor="end" className="fill-moss" fontSize="10">
+              <line x1={pad.left} x2={width - pad.right} y1={pos} y2={pos} stroke="#f1f5f9" strokeWidth="1" />
+              <text x={pad.left - 8} y={pos + 4} textAnchor="end" fill="#94a3b8" fontSize="10" fontWeight="500">
                 {formatMoney(value)}
               </text>
             </g>
@@ -289,6 +291,7 @@ function ValueBarChart({
           const top = y(Math.max(item.value, 0));
           const bottom = item.value >= 0 ? zero : y(item.value);
           const barHeight = Math.max(1, Math.abs(bottom - top));
+          const isHovered = index === (hover ?? points.length - 1);
           return (
             <rect
               key={item.day}
@@ -296,12 +299,14 @@ function ValueBarChart({
               y={Math.min(top, bottom)}
               width={barW}
               height={barHeight}
-              fill={index === (hover ?? points.length - 1) ? "#163628" : "#1f4a38"}
+              rx="2"
+              fill={isHovered ? "#1d4ed8" : "#2563eb"}
+              className="transition-colors duration-150"
             />
           );
         })}
-        <path d={investedPath} fill="none" stroke="#3d6b54" strokeWidth="1.5" strokeDasharray="5 4" />
-        {showImoex && imoexPath ? <path d={imoexPath} fill="none" stroke="#9b2c2c" strokeWidth="1.5" /> : null}
+        <path d={investedPath} fill="none" stroke="#d97706" strokeWidth="2" strokeDasharray="5 4" />
+        {showImoex && imoexPath ? <path d={imoexPath} fill="none" stroke="#e11d48" strokeWidth="2" /> : null}
         {points.map((item, index) =>
           index % labelEvery === 0 || index === points.length - 1 ? (
             <text
@@ -309,8 +314,9 @@ function ValueBarChart({
               x={x(index) + barW / 2}
               y={height - 8}
               textAnchor="middle"
-              className="fill-moss"
+              fill="#94a3b8"
               fontSize="10"
+              fontWeight="500"
             >
               {formatBucket(item.day, granularity)}
             </text>
@@ -330,34 +336,34 @@ function ValueBarChart({
           />
         ))}
       </svg>
-      <div className="mt-3 grid gap-3 sm:grid-cols-2">
-        <article className="border border-line bg-paper/70 p-3">
-          <p className="text-xs uppercase tracking-[0.16em] text-moss">Вложено</p>
-          <p className="mt-1 font-display text-xl">{formatSignedMoney(investedPeriod)}</p>
-          <p className="mt-1 text-xs text-moss">Чистые вводы − выводы за период</p>
+      <div className="mt-4 grid gap-3 sm:grid-cols-2">
+        <article className="rounded-2xl border border-emerald-500/10 bg-slate-50/70 p-3.5 backdrop-blur-xs">
+          <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">Вложено</p>
+          <p className="mt-1 text-xl font-bold tracking-tight text-slate-900">{formatSignedMoney(investedPeriod)}</p>
+          <p className="mt-1 text-xs text-slate-500">Чистые вводы − выводы за период</p>
         </article>
-        <article className="border border-line bg-paper/70 p-3">
-          <p className="text-xs uppercase tracking-[0.16em] text-moss">Прибыль</p>
-          <p className={`mt-1 font-display text-xl ${moneyClass(profitPeriod)}`}>{formatSignedMoney(profitPeriod)}</p>
-          <p className={`mt-1 text-xs ${moneyClass(profitPeriod) || "text-moss"}`}>
+        <article className="rounded-2xl border border-emerald-500/10 bg-slate-50/70 p-3.5 backdrop-blur-xs">
+          <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">Прибыль</p>
+          <p className={`mt-1 text-xl font-bold tracking-tight ${moneyClass(profitPeriod)}`}>{formatSignedMoney(profitPeriod)}</p>
+          <p className={`mt-1 text-xs ${moneyClass(profitPeriod) || "text-slate-500"}`}>
             {profitPercent != null
               ? `${formatPercent(profitPercent)} · изменение стоимости − вводы`
               : "Изменение стоимости − вводы за период"}
           </p>
         </article>
       </div>
-      <div className="mt-2 flex flex-wrap gap-4 text-xs text-moss">
-        <span>
-          <span className="mr-1 inline-block h-2 w-4 bg-forest align-middle" />
+      <div className="mt-3 flex flex-wrap gap-4 text-xs font-medium text-slate-500">
+        <span className="inline-flex items-center gap-1.5">
+          <span className="h-2.5 w-3.5 rounded-xs bg-[#2563eb]" />
           стоимость на конец периода
         </span>
-        <span>
-          <span className="mr-1 inline-block h-0.5 w-4 border-t border-dashed border-moss align-middle" />
+        <span className="inline-flex items-center gap-1.5">
+          <span className="h-0.5 w-3.5 border-t-2 border-dashed border-[#d97706]" />
           вложено
         </span>
         {showImoex && points.some((item) => item.imoex != null) ? (
-          <span>
-            <span className="mr-1 inline-block h-0.5 w-4 bg-danger align-middle" />
+          <span className="inline-flex items-center gap-1.5">
+            <span className="h-0.5 w-3.5 bg-[#e11d48]" />
             IMOEX к старту периода
           </span>
         ) : null}

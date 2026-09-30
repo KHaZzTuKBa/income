@@ -90,17 +90,17 @@ function ModeSlider({
     <div
       role="tablist"
       aria-label="Режим отраслей"
-      className="relative inline-grid grid-cols-2 border border-line bg-paper-2 p-1 text-sm"
+      className="inline-flex items-center gap-1 rounded-full border border-emerald-500/15 bg-emerald-500/[0.06] p-1.5 backdrop-blur-sm shadow-xs"
     >
-      <span
-        className="pointer-events-none absolute top-1 bottom-1 left-1 w-[calc(50%-0.25rem)] bg-forest transition-transform duration-200 ease-out"
-        style={{ transform: mode === "categories" ? "translateX(100%)" : "translateX(0)" }}
-      />
       <button
         type="button"
         role="tab"
         aria-selected={mode === "accounts"}
-        className={`relative z-10 px-5 py-1.5 ${mode === "accounts" ? "text-paper" : "text-moss"}`}
+        className={`rounded-full px-5 py-2 text-sm font-semibold transition-all duration-200 ${
+          mode === "accounts"
+            ? "bg-white text-emerald-950 shadow-sm"
+            : "text-slate-600 hover:text-emerald-900"
+        }`}
         onClick={() => onChange("accounts")}
       >
         По счетам
@@ -109,7 +109,11 @@ function ModeSlider({
         type="button"
         role="tab"
         aria-selected={mode === "categories"}
-        className={`relative z-10 px-5 py-1.5 ${mode === "categories" ? "text-paper" : "text-moss"}`}
+        className={`rounded-full px-5 py-2 text-sm font-semibold transition-all duration-200 ${
+          mode === "categories"
+            ? "bg-white text-emerald-950 shadow-sm"
+            : "text-slate-600 hover:text-emerald-900"
+        }`}
         onClick={() => onChange("categories")}
       >
         По категориям
@@ -120,6 +124,7 @@ function ModeSlider({
 
 export function SectorsPage() {
   const [mode, setMode] = useState<"accounts" | "categories">("accounts");
+  const [isTransitioning, setIsTransitioning] = useState(false);
   const [picked, setPicked] = useState<string[] | null>(null);
 
   const connection = useQuery({
@@ -206,6 +211,15 @@ export function SectorsPage() {
     });
   };
 
+  const changeMode = (nextMode: "accounts" | "categories") => {
+    if (nextMode === mode) return;
+    setIsTransitioning(true);
+    setMode(nextMode);
+    setTimeout(() => {
+      setIsTransitioning(false);
+    }, 360);
+  };
+
   const nothingSelected = selected.size === 0;
   const papersMissing = (sectors.data?.holdings.length ?? 0) === 0;
   const allUnknown =
@@ -215,129 +229,182 @@ export function SectorsPage() {
     <section className="space-y-8">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className="font-display text-3xl">Отрасли</h1>
-          <p className="mt-2 max-w-2xl text-sm text-moss">
+          <div className="inline-flex items-center gap-2 rounded-full bg-emerald-500/10 px-3.5 py-1 text-xs font-semibold text-emerald-800 mb-2.5">
+            <span className="h-1.5 w-1.5 rounded-full bg-emerald-600 animate-pulse" />
+            <span>Аналитика структуры</span>
+          </div>
+          <h1 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-slate-900">Отрасли</h1>
+          <p className="mt-2 max-w-2xl text-sm text-slate-600">
             {configured
               ? "Доли по сектору экономики среди бумаг, без кэша. Сектор подтягивается при синхронизации."
               : "Сначала сохраните read-only токен Т‑Инвестиций в настройках."}
           </p>
         </div>
         {configured ? null : (
-          <Link to="/settings" className="bg-forest px-4 py-2 text-sm text-paper hover:bg-forest-2">
+          <Link
+            to="/settings"
+            className="inline-flex items-center gap-2 rounded-full bg-emerald-700 hover:bg-emerald-800 text-white px-5 py-2.5 text-sm font-semibold shadow-sm transition-all"
+          >
             Открыть настройки
           </Link>
         )}
       </div>
 
-      {configured ? <ModeSlider mode={mode} onChange={setMode} /> : null}
+      {configured ? <ModeSlider mode={mode} onChange={changeMode} /> : null}
 
       {!configured ? null : sectors.isLoading ? (
-        <p className="text-sm text-moss">Считаем доли…</p>
+        <div className="rounded-3xl border border-emerald-500/15 bg-white/80 p-8 text-center backdrop-blur-sm shadow-xs">
+          <div className="inline-flex h-9 w-9 animate-spin items-center justify-center rounded-full border-2 border-emerald-600 border-t-transparent" />
+          <p className="mt-3 text-sm font-medium text-emerald-900">Считаем доли отраслей…</p>
+        </div>
       ) : sectors.isError ? (
-        <p className="text-sm text-danger">
+        <div className="rounded-3xl border border-red-200 bg-red-50/80 p-6 text-sm font-medium text-red-700">
           {sectors.error instanceof Error ? sectors.error.message : "Не удалось загрузить отрасли"}
-        </p>
+        </div>
       ) : papersMissing ? (
-        <p className="text-sm text-moss">Нет бумаг в позициях. Обновите портфель на дашборде.</p>
+        <div className="rounded-3xl border border-emerald-500/15 bg-white/80 p-8 text-center backdrop-blur-sm shadow-xs">
+          <p className="text-sm font-medium text-slate-600">Нет бумаг в позициях. Обновите портфель на дашборде.</p>
+        </div>
       ) : (
         <>
           {allUnknown ? (
-            <p className="text-sm text-moss">
+            <div className="rounded-2xl border border-amber-500/20 bg-amber-50/80 p-4 text-sm font-medium text-amber-900">
               У бумаг ещё нет отрасли — нажмите «Обновить» на дашборде, чтобы подтянуть сектор из Т‑Банка.
-            </p>
+            </div>
           ) : null}
 
-          {mode === "accounts" ? (
-            <div className="space-y-6">
-              {(sectors.data?.pies ?? []).map((pie) => (
-                <SectorPie
-                  key={pie.key}
-                  title={pie.label}
-                  total={pie.total}
-                  slices={pie.slices}
-                  colors={colorKeys}
-                  emptyHint="На этом счёте нет бумаг."
-                />
-              ))}
-            </div>
-          ) : (
-            <div className="grid gap-6 lg:grid-cols-[16rem_minmax(0,1fr)]">
-              <div className="h-fit border border-line bg-paper-2/40 p-5 lg:sticky lg:top-6">
-                <div className="flex items-center justify-between gap-2">
-                  <h2 className="font-display text-lg">Папки</h2>
-                  <div className="flex gap-2 text-xs">
-                    <button
-                      type="button"
-                      className="text-moss hover:text-forest"
-                      onClick={() => setPicked(folderKeys)}
-                    >
-                      Все
-                    </button>
-                    <button
-                      type="button"
-                      className="text-moss hover:text-forest"
-                      onClick={() => setPicked([])}
-                    >
-                      Снять
-                    </button>
+          {/* Smooth swipe track between "accounts" and "categories" */}
+          <div className="w-full overflow-hidden">
+            <div
+              className="flex w-[200%] items-start"
+              style={{
+                transform: mode === "categories" ? "translateX(-50%)" : "translateX(0%)",
+                transition: "transform 350ms cubic-bezier(0.16, 1, 0.3, 1)",
+              }}
+            >
+              {/* Accounts view (Panel 1) */}
+              <div
+                className={`w-1/2 shrink-0 transition-opacity duration-300 ${
+                  mode === "accounts"
+                    ? "opacity-100"
+                    : isTransitioning
+                      ? "opacity-25 pointer-events-none"
+                      : "h-0 max-h-0 overflow-hidden opacity-0 pointer-events-none"
+                }`}
+              >
+                <div className="space-y-6">
+                  {(sectors.data?.pies ?? []).map((pie) => (
+                    <SectorPie
+                      key={pie.key}
+                      title={pie.label}
+                      total={pie.total}
+                      slices={pie.slices}
+                      colors={colorKeys}
+                      emptyHint="На этом счёте нет бумаг."
+                    />
+                  ))}
+                </div>
+              </div>
+
+              {/* Categories view (Panel 2) */}
+              <div
+                className={`w-1/2 shrink-0 transition-opacity duration-300 ${
+                  mode === "categories"
+                    ? "opacity-100"
+                    : isTransitioning
+                      ? "opacity-25 pointer-events-none"
+                      : "h-0 max-h-0 overflow-hidden opacity-0 pointer-events-none"
+                }`}
+              >
+                <div className="grid gap-6 lg:grid-cols-[17rem_minmax(0,1fr)]">
+                  <div className="h-fit rounded-3xl border border-emerald-500/15 bg-white/90 p-5 shadow-sm backdrop-blur-md lg:sticky lg:top-24">
+                    <div className="flex items-center justify-between gap-2 border-b border-emerald-500/10 pb-3.5">
+                      <div className="flex items-center gap-2">
+                        <span className="h-2 w-2 rounded-full bg-emerald-500" />
+                        <h2 className="text-base font-bold text-slate-900">Папки</h2>
+                      </div>
+                      <div className="flex gap-1.5 text-xs">
+                        <button
+                          type="button"
+                          className="rounded-full bg-emerald-500/10 px-2.5 py-1 font-semibold text-emerald-800 hover:bg-emerald-500/20 transition-colors"
+                          onClick={() => setPicked(folderKeys)}
+                        >
+                          Все
+                        </button>
+                        <button
+                          type="button"
+                          className="rounded-full bg-slate-100 px-2.5 py-1 font-semibold text-slate-600 hover:bg-slate-200 transition-colors"
+                          onClick={() => setPicked([])}
+                        >
+                          Снять
+                        </button>
+                      </div>
+                    </div>
+                    {categories.isLoading ? (
+                      <div className="mt-4 flex items-center gap-2 text-sm text-emerald-800/80">
+                        <span className="h-2.5 w-2.5 rounded-full bg-emerald-500 animate-ping" />
+                        <span>Загружаем категории…</span>
+                      </div>
+                    ) : (
+                      <ul className="mt-3.5 space-y-1 text-sm">
+                        {folderRows.map(({ node, depth }) => (
+                          <li key={node.id} style={{ paddingLeft: depth * 12 }}>
+                            <label className="flex cursor-pointer items-center gap-2.5 rounded-xl px-2.5 py-1.5 text-slate-700 hover:bg-emerald-500/5 hover:text-emerald-950 transition-colors">
+                              <input
+                                type="checkbox"
+                                className="h-4 w-4 rounded-md border-slate-300 text-emerald-600 accent-emerald-600 focus:ring-emerald-500/20"
+                                checked={selected.has(String(node.id))}
+                                onChange={() => toggleFolder(String(node.id))}
+                              />
+                              <span className="truncate font-medium">{node.name}</span>
+                            </label>
+                          </li>
+                        ))}
+                        <li>
+                          <label className="flex cursor-pointer items-center gap-2.5 rounded-xl px-2.5 py-1.5 text-slate-700 hover:bg-emerald-500/5 hover:text-emerald-950 transition-colors">
+                            <input
+                              type="checkbox"
+                              className="h-4 w-4 rounded-md border-slate-300 text-emerald-600 accent-emerald-600 focus:ring-emerald-500/20"
+                              checked={selected.has(UNASSIGNED)}
+                              onChange={() => toggleFolder(UNASSIGNED)}
+                            />
+                            <span className="font-medium text-slate-500">Без категории</span>
+                          </label>
+                        </li>
+                      </ul>
+                    )}
+                  </div>
+                  <div className="space-y-6">
+                    {nothingSelected ? (
+                      <div className="rounded-3xl border border-emerald-500/15 bg-white/80 p-8 text-center backdrop-blur-sm shadow-xs">
+                        <p className="text-sm font-medium text-slate-600">Отметьте папки, чтобы собрать диаграммы.</p>
+                      </div>
+                    ) : (
+                      <>
+                        {folderPies.map((pie) => (
+                          <SectorPie
+                            key={pie.key}
+                            title={pie.title}
+                            total={pie.total}
+                            slices={pie.slices}
+                            colors={colorKeys}
+                            emptyHint="В этой папке нет бумаг."
+                          />
+                        ))}
+                        <SectorPie
+                          title="Все выбранные"
+                          total={categoryPie.total}
+                          slices={categoryPie.slices}
+                          colors={colorKeys}
+                          emptyHint="В выбранных папках нет бумаг."
+                        />
+                      </>
+                    )}
                   </div>
                 </div>
-                {categories.isLoading ? (
-                  <p className="mt-4 text-sm text-moss">Загружаем категории…</p>
-                ) : (
-                  <ul className="mt-4 space-y-2 text-sm">
-                    {folderRows.map(({ node, depth }) => (
-                      <li key={node.id} style={{ paddingLeft: depth * 12 }}>
-                        <label className="flex cursor-pointer items-center gap-2">
-                          <input
-                            type="checkbox"
-                            checked={selected.has(String(node.id))}
-                            onChange={() => toggleFolder(String(node.id))}
-                          />
-                          <span className="truncate">{node.name}</span>
-                        </label>
-                      </li>
-                    ))}
-                    <li>
-                      <label className="flex cursor-pointer items-center gap-2">
-                        <input
-                          type="checkbox"
-                          checked={selected.has(UNASSIGNED)}
-                          onChange={() => toggleFolder(UNASSIGNED)}
-                        />
-                        <span>Без категории</span>
-                      </label>
-                    </li>
-                  </ul>
-                )}
-              </div>
-              <div className="space-y-6">
-                {nothingSelected ? (
-                  <p className="text-sm text-moss">Отметьте папки, чтобы собрать диаграммы.</p>
-                ) : (
-                  <>
-                    {folderPies.map((pie) => (
-                      <SectorPie
-                        key={pie.key}
-                        title={pie.title}
-                        total={pie.total}
-                        slices={pie.slices}
-                        colors={colorKeys}
-                        emptyHint="В этой папке нет бумаг."
-                      />
-                    ))}
-                    <SectorPie
-                      title="Все выбранные"
-                      total={categoryPie.total}
-                      slices={categoryPie.slices}
-                      colors={colorKeys}
-                      emptyHint="В выбранных папках нет бумаг."
-                    />
-                  </>
-                )}
               </div>
             </div>
-          )}
+          </div>
         </>
       )}
     </section>

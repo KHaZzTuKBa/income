@@ -9,10 +9,11 @@ function formatMoney(value: string | undefined): string {
   if (Number.isNaN(parsed)) {
     return "—";
   }
-  return `${parsed.toLocaleString("ru-RU", {
+  const formatted = parsed.toLocaleString("ru-RU", {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
-  })} ₽`;
+  });
+  return `${formatted}\u00A0₽`;
 }
 
 function formatNumber(value: string): string {
@@ -109,8 +110,8 @@ export function DashboardPage() {
     <section className="space-y-8">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className="font-display text-3xl">Портфель</h1>
-          <p className="mt-2 max-w-2xl text-sm text-moss">
+          <h1 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-slate-900">Портфель</h1>
+          <p className="mt-2 max-w-2xl text-sm text-slate-600">
             {configured
               ? historyFrom
                 ? `Журнал операций с ${historyFrom}. Стоимость в рублях; вложено — чистые вводы минус выводы.`
@@ -123,14 +124,27 @@ export function DashboardPage() {
             type="button"
             onClick={() => syncMutation.mutate()}
             disabled={running}
-            className="border border-line bg-paper px-4 py-2 text-sm hover:border-forest hover:text-forest disabled:opacity-60"
+            className="inline-flex items-center gap-2 rounded-full bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2.5 text-sm font-semibold shadow-sm shadow-emerald-600/20 transition-all duration-200 active:scale-95 disabled:opacity-50"
           >
-            {running ? "Обновляем…" : "Обновить"}
+            <svg
+              viewBox="0 0 16 16"
+              className={`h-4 w-4 shrink-0 ${running ? "animate-spin" : ""}`}
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
+            >
+              <path d="M1.5 8a6.5 6.5 0 1 0 1.9-4.6L1.5 5.5" />
+              <path d="M1.5 1.5v4h4" />
+            </svg>
+            <span>{running ? "Обновляем…" : "Обновить"}</span>
           </button>
         ) : (
           <Link
             to="/settings"
-            className="bg-forest px-4 py-2 text-sm text-paper hover:bg-forest-2"
+            className="inline-flex items-center gap-2 rounded-full bg-emerald-700 hover:bg-emerald-800 text-white px-5 py-2.5 text-sm font-semibold shadow-sm transition-all duration-200 active:scale-95"
           >
             Открыть настройки
           </Link>
@@ -146,18 +160,18 @@ export function DashboardPage() {
         </p>
       ) : null}
       {snapshot?.invested_missing ? (
-        <p className="text-sm text-moss">
+        <p className="text-sm text-slate-500">
           Вводы в журнале не найдены — карточка «Вложено» может быть неполной.
         </p>
       ) : null}
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <article className="border border-line bg-paper-2/40 p-5">
-          <p className="text-xs uppercase tracking-[0.16em] text-moss">Стоимость</p>
-          <p className="mt-3 font-display text-3xl">
+        <article className="rounded-3xl border border-emerald-500/15 bg-white p-5 shadow-sm">
+          <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">Стоимость</p>
+          <p className="mt-2 text-xl sm:text-2xl xl:text-[1.65rem] font-extrabold tracking-tight text-slate-900 whitespace-nowrap tabular-nums">
             {configured ? formatMoney(snapshot?.value) : "—"}
           </p>
-          <p className="mt-2 text-xs text-moss">
+          <p className="mt-2 text-xs text-slate-500 truncate" title={configured && snapshot ? `в т.ч. кэш ${formatMoney(snapshot.cash)}` : undefined}>
             {configured && snapshot
               ? `в т.ч. кэш ${formatMoney(snapshot.cash)}${
                   snapshot.prices_live ? " · живые цены" : " · цена с последнего синка"
@@ -165,32 +179,32 @@ export function DashboardPage() {
               : "Позиции × цена + кэш"}
           </p>
         </article>
-        <article className="border border-line bg-paper-2/40 p-5">
-          <p className="text-xs uppercase tracking-[0.16em] text-moss">Вложено</p>
-          <p className="mt-3 font-display text-3xl">
+        <article className="rounded-3xl border border-emerald-500/15 bg-white p-5 shadow-sm">
+          <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">Вложено</p>
+          <p className="mt-2 text-xl sm:text-2xl xl:text-[1.65rem] font-extrabold tracking-tight text-slate-900 whitespace-nowrap tabular-nums">
             {configured ? formatMoney(snapshot?.invested) : "—"}
           </p>
-          <p className="mt-2 text-xs text-moss">Чистые вводы − выводы</p>
+          <p className="mt-2 text-xs text-slate-500">Чистые вводы − выводы</p>
         </article>
-        <article className="border border-line bg-paper-2/40 p-5">
-          <p className="text-xs uppercase tracking-[0.16em] text-moss">Прибыль</p>
-          <p className={`mt-3 font-display text-3xl ${configured && snapshot ? moneyClass(snapshot.profit) : ""}`}>
+        <article className="rounded-3xl border border-emerald-500/15 bg-white p-5 shadow-sm">
+          <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">Прибыль</p>
+          <p className={`mt-2 text-xl sm:text-2xl xl:text-[1.65rem] font-extrabold tracking-tight whitespace-nowrap tabular-nums ${configured && snapshot ? moneyClass(snapshot.profit) : ""}`}>
             {configured && snapshot ? formatSignedMoney(snapshot.profit) : "—"}
           </p>
-          <p className={`mt-2 text-xs ${configured ? moneyClass(snapshot?.profit) : "text-moss"}`}>
+          <p className={`mt-2 text-xs ${configured ? moneyClass(snapshot?.profit) : "text-slate-500"}`}>
             {configured && snapshot?.profit_percent != null
               ? `${Number(snapshot.profit_percent) > 0 ? "+" : ""}${formatNumber(snapshot.profit_percent)}% · стоимость − вложено`
               : "Стоимость − вложено"}
           </p>
         </article>
-        <article className="border border-line bg-paper-2/40 p-5">
-          <p className="text-xs uppercase tracking-[0.16em] text-moss">XIRR</p>
-          <p className={`mt-3 font-display text-3xl ${configured && snapshot?.xirr_percent ? moneyClass(snapshot.xirr_percent) : ""}`}>
+        <article className="rounded-3xl border border-emerald-500/15 bg-white p-5 shadow-sm">
+          <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">XIRR</p>
+          <p className={`mt-2 text-xl sm:text-2xl xl:text-[1.65rem] font-extrabold tracking-tight whitespace-nowrap tabular-nums ${configured && snapshot?.xirr_percent ? moneyClass(snapshot.xirr_percent) : ""}`}>
             {configured && snapshot?.xirr_percent != null
               ? `${Number(snapshot.xirr_percent) > 0 ? "+" : ""}${formatNumber(snapshot.xirr_percent)}%`
               : "—"}
           </p>
-          <p className="mt-2 text-xs text-moss">
+          <p className="mt-2 text-xs text-slate-500">
             {configured && snapshot?.xirr_from
               ? `годовых с ${snapshot.xirr_from}`
               : "По вводам, выводам и текущей стоимости"}
@@ -201,24 +215,23 @@ export function DashboardPage() {
       {configured ? <PortfolioCharts enabled={configured} /> : null}
 
       {configured ? (
-        <p className="text-sm text-moss">
+        <p className="text-sm font-medium text-slate-500">
           Счетов: {connection.data?.accounts_count ?? 0} · операций:{" "}
           {connection.data?.operations_count ?? 0} · позиций: {snapshot?.positions.length ?? 0}
         </p>
       ) : null}
 
       <div>
-        <h2 className="font-display text-2xl">Счета</h2>
+        <h2 className="text-xl sm:text-2xl font-bold tracking-tight text-slate-900">Счета</h2>
         <ul className="mt-3 space-y-2">
           {(accounts.data ?? []).length === 0 ? (
-            <li className="text-sm text-moss">Пока нет счетов.</li>
+            <li className="text-sm text-slate-500">Пока нет счетов.</li>
           ) : (
             (accounts.data ?? []).map((account) => (
-              <li key={account.id} className="border border-line bg-paper-2/30 px-4 py-3 text-sm">
-                <span className="font-medium">{account.name || account.broker_account_id}</span>
-                <span className="text-moss">
-                  {" "}
-                  · {accountType(account.type)} · {account.status === "open" ? "открыт" : account.status}
+              <li key={account.id} className="rounded-2xl border border-emerald-500/10 bg-white px-4 py-3 text-sm shadow-xs flex items-center justify-between">
+                <span className="font-semibold text-slate-900">{account.name || account.broker_account_id}</span>
+                <span className="rounded-full bg-emerald-500/10 px-2.5 py-0.5 text-xs font-semibold text-emerald-800">
+                  {accountType(account.type)} · {account.status === "open" ? "открыт" : account.status}
                 </span>
               </li>
             ))
@@ -227,104 +240,108 @@ export function DashboardPage() {
       </div>
 
       <div>
-        <h2 className="font-display text-2xl">Активы</h2>
-        <div className="mt-3 overflow-x-auto border border-line">
-          <table className="w-full min-w-[56rem] text-left text-sm">
-            <thead className="bg-paper-2 text-moss">
-              <tr>
-                <th className="px-3 py-2 font-normal">Бумага</th>
-                <th className="px-3 py-2 font-normal">Счёт</th>
-                <th className="px-3 py-2 font-normal">Кол-во</th>
-                <th className="px-3 py-2 font-normal">Средняя</th>
-                <th className="px-3 py-2 font-normal">Цена</th>
-                <th className="px-3 py-2 font-normal">Стоимость</th>
-                <th className="px-3 py-2 font-normal">P&amp;L</th>
-                <th className="px-3 py-2 font-normal">Доля</th>
-              </tr>
-            </thead>
-            <tbody>
-              {(snapshot?.positions ?? []).length === 0 ? (
+        <h2 className="text-xl sm:text-2xl font-bold tracking-tight text-slate-900">Активы</h2>
+        <div className="mt-3 overflow-hidden rounded-3xl border border-slate-200/90 bg-[#F1F5F4] p-1.5 shadow-[0_4px_24px_-4px_rgba(16,185,129,0.06),0_2px_8px_-2px_rgba(0,0,0,0.02)]">
+          <div className="overflow-x-auto rounded-[1.3rem]">
+            <table className="w-full min-w-[56rem] text-left text-sm">
+              <thead className="bg-[#E2EAE7] text-slate-700 font-semibold text-xs tracking-wider uppercase">
                 <tr>
-                  <td className="px-3 py-3 text-moss" colSpan={8}>
-                    Нет позиций. Запустите синхронизацию.
-                  </td>
+                  <th className="px-4 py-3 font-semibold">Бумага</th>
+                  <th className="px-4 py-3 font-semibold">Счёт</th>
+                  <th className="px-4 py-3 font-semibold">Кол-во</th>
+                  <th className="px-4 py-3 font-semibold">Средняя</th>
+                  <th className="px-4 py-3 font-semibold">Цена</th>
+                  <th className="px-4 py-3 font-semibold">Стоимость</th>
+                  <th className="px-4 py-3 font-semibold">P&amp;L</th>
+                  <th className="px-4 py-3 font-semibold">Доля</th>
                 </tr>
-              ) : (
-                (snapshot?.positions ?? []).map((position) => (
-                  <tr key={`${position.account_id}-${position.figi}`} className="border-t border-line">
-                    <td className="px-3 py-2">
-                      <p>
-                        {position.ticker || position.figi}
-                        {position.is_cash ? (
-                          <span className="ml-2 text-xs uppercase tracking-wide text-moss">кэш</span>
-                        ) : null}
-                      </p>
-                      <p className="text-xs text-moss">{position.name}</p>
+              </thead>
+              <tbody className="divide-y divide-slate-200/60">
+                {(snapshot?.positions ?? []).length === 0 ? (
+                  <tr>
+                    <td className="px-4 py-4 text-slate-500" colSpan={8}>
+                      Нет позиций. Запустите синхронизацию.
                     </td>
-                    <td className="px-3 py-2">{position.account_name}</td>
-                    <td className="px-3 py-2">{formatNumber(position.quantity)}</td>
-                    <td className="px-3 py-2">
-                      {formatNumber(position.average_price)} {position.average_price_currency}
-                    </td>
-                    <td className="px-3 py-2">
-                      {formatNumber(position.current_price)} {position.current_price_currency}
-                    </td>
-                    <td className="px-3 py-2">{formatMoney(position.value)}</td>
-                    <td className={`px-3 py-2 ${moneyClass(position.pnl)}`}>
-                      {formatSignedMoney(position.pnl)}
-                      {position.pnl_percent != null ? (
-                        <span className="block text-xs">
-                          {Number(position.pnl_percent) > 0 ? "+" : ""}
-                          {formatNumber(position.pnl_percent)}%
-                        </span>
-                      ) : null}
-                    </td>
-                    <td className="px-3 py-2">{formatNumber(position.share)}%</td>
                   </tr>
-                ))
-              )}
-            </tbody>
-          </table>
+                ) : (
+                  (snapshot?.positions ?? []).map((position) => (
+                    <tr key={`${position.account_id}-${position.figi}`} className="hover:bg-white/85 transition-colors">
+                      <td className="px-4 py-3">
+                        <p className="font-semibold text-slate-900">
+                          {position.ticker || position.figi}
+                          {position.is_cash ? (
+                            <span className="ml-2 rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-semibold uppercase text-emerald-800">кэш</span>
+                          ) : null}
+                        </p>
+                        <p className="text-xs text-slate-500">{position.name}</p>
+                      </td>
+                      <td className="px-4 py-3 text-slate-600">{position.account_name}</td>
+                      <td className="px-4 py-3 font-mono font-medium text-slate-800">{formatNumber(position.quantity)}</td>
+                      <td className="px-4 py-3 font-mono text-slate-700">
+                        {formatNumber(position.average_price)} {position.average_price_currency}
+                      </td>
+                      <td className="px-4 py-3 font-mono text-slate-700">
+                        {formatNumber(position.current_price)} {position.current_price_currency}
+                      </td>
+                      <td className="px-4 py-3 font-semibold text-slate-900 whitespace-nowrap">{formatMoney(position.value)}</td>
+                      <td className={`px-4 py-3 font-semibold whitespace-nowrap ${moneyClass(position.pnl)}`}>
+                        {formatSignedMoney(position.pnl)}
+                        {position.pnl_percent != null ? (
+                          <span className="block text-xs font-normal">
+                            {Number(position.pnl_percent) > 0 ? "+" : ""}
+                            {formatNumber(position.pnl_percent)}%
+                          </span>
+                        ) : null}
+                      </td>
+                      <td className="px-4 py-3 font-medium text-slate-700">{formatNumber(position.share)}%</td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
         </div>
       </div>
 
       <div>
-        <h2 className="font-display text-2xl">Последние операции</h2>
-        <div className="mt-3 overflow-x-auto border border-line">
-          <table className="w-full min-w-[44rem] text-left text-sm">
-            <thead className="bg-paper-2 text-moss">
-              <tr>
-                <th className="px-3 py-2 font-normal">Дата</th>
-                <th className="px-3 py-2 font-normal">Тип</th>
-                <th className="px-3 py-2 font-normal">Бумага</th>
-                <th className="px-3 py-2 font-normal">Счёт</th>
-                <th className="px-3 py-2 font-normal">Сумма</th>
-              </tr>
-            </thead>
-            <tbody>
-              {(operations.data ?? []).length === 0 ? (
+        <h2 className="text-xl sm:text-2xl font-bold tracking-tight text-slate-900">Последние операции</h2>
+        <div className="mt-3 overflow-hidden rounded-3xl border border-slate-200/90 bg-[#F1F5F4] p-1.5 shadow-[0_4px_24px_-4px_rgba(16,185,129,0.06),0_2px_8px_-2px_rgba(0,0,0,0.02)]">
+          <div className="overflow-x-auto rounded-[1.3rem]">
+            <table className="w-full min-w-[44rem] text-left text-sm">
+              <thead className="bg-[#E2EAE7] text-slate-700 font-semibold text-xs tracking-wider uppercase">
                 <tr>
-                  <td className="px-3 py-3 text-moss" colSpan={5}>
-                    Журнал пуст.
-                  </td>
+                  <th className="px-4 py-3 font-semibold">Дата</th>
+                  <th className="px-4 py-3 font-semibold">Тип</th>
+                  <th className="px-4 py-3 font-semibold">Бумага</th>
+                  <th className="px-4 py-3 font-semibold">Счёт</th>
+                  <th className="px-4 py-3 font-semibold">Сумма</th>
                 </tr>
-              ) : (
-                (operations.data ?? []).map((operation) => (
-                  <tr key={operation.id} className="border-t border-line">
-                    <td className="px-3 py-2">
-                      {new Date(operation.occurred_at).toLocaleString("ru-RU")}
-                    </td>
-                    <td className="px-3 py-2">{operation.name || operationLabel(operation.operation_type)}</td>
-                    <td className="px-3 py-2">{operation.ticker || operation.figi || "—"}</td>
-                    <td className="px-3 py-2">{operation.account_name}</td>
-                    <td className="px-3 py-2">
-                      {formatNumber(operation.payment)} {operation.currency}
+              </thead>
+              <tbody className="divide-y divide-slate-200/60">
+                {(operations.data ?? []).length === 0 ? (
+                  <tr>
+                    <td className="px-4 py-4 text-slate-500" colSpan={5}>
+                      Журнал пуст.
                     </td>
                   </tr>
-                ))
-              )}
-            </tbody>
-          </table>
+                ) : (
+                  (operations.data ?? []).map((operation) => (
+                    <tr key={operation.id} className="hover:bg-white/85 transition-colors">
+                      <td className="px-4 py-3 text-slate-600 text-xs whitespace-nowrap">
+                        {new Date(operation.occurred_at).toLocaleString("ru-RU")}
+                      </td>
+                      <td className="px-4 py-3 font-medium text-slate-900">{operation.name || operationLabel(operation.operation_type)}</td>
+                      <td className="px-4 py-3 text-slate-700">{operation.ticker || operation.figi || "—"}</td>
+                      <td className="px-4 py-3 text-slate-600">{operation.account_name}</td>
+                      <td className="px-4 py-3 font-semibold text-slate-900 font-mono whitespace-nowrap">
+                        {formatNumber(operation.payment)} {operation.currency}
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
         </div>
       </div>
     </section>

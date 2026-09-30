@@ -3,7 +3,11 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { getMe, logout } from "../api/auth";
 
 const linkClass = ({ isActive }: { isActive: boolean }) =>
-  `text-sm ${isActive ? "text-forest border-b border-forest" : "text-moss hover:text-forest"}`;
+  `rounded-full px-3.5 py-1.5 text-sm font-medium transition-all duration-200 ${
+    isActive
+      ? "bg-emerald-500/10 text-emerald-800 font-semibold shadow-xs"
+      : "text-slate-600 hover:text-emerald-800 hover:bg-emerald-500/5"
+  }`;
 
 export function AppLayout() {
   const queryClient = useQueryClient();
@@ -20,20 +24,20 @@ export function AppLayout() {
   });
 
   return (
-    <div className="min-h-screen bg-paper">
-      <header className="border-b border-line bg-paper-2/60">
-        <div className="mx-auto flex max-w-5xl items-center justify-between px-6 py-4">
+    <div className="min-h-screen bg-[#f8faf9] text-slate-900">
+      <header className="sticky top-0 z-30 border-b border-emerald-500/10 bg-white/80 backdrop-blur-md">
+        <div className="mx-auto flex max-w-5xl items-center justify-between px-6 py-3.5">
           <div className="flex items-center gap-8">
             <div className="flex items-center gap-3">
-              <span className="flex h-8 w-8 items-center justify-center rounded-sm bg-forest font-display text-sm text-paper">
+              <span className="flex h-9 w-9 items-center justify-center rounded-2xl bg-gradient-to-tr from-emerald-600 to-teal-500 text-white font-bold text-base shadow-sm shadow-emerald-500/25">
                 P
               </span>
               <div>
-                <p className="font-display text-lg leading-none tracking-wide">Portfel</p>
-                <p className="mt-1 text-xs text-moss">Личный учёт портфеля</p>
+                <p className="font-bold text-lg leading-tight tracking-tight text-slate-900">Portfel</p>
+                <p className="text-[11px] font-medium text-emerald-700/80">Личный учёт портфеля</p>
               </div>
             </div>
-            <nav className="flex flex-wrap gap-4">
+            <nav className="flex flex-wrap items-center gap-1.5">
               <NavLink to="/" end className={linkClass}>
                 Дашборд
               </NavLink>
@@ -51,13 +55,15 @@ export function AppLayout() {
               </NavLink>
             </nav>
           </div>
-          <div className="flex items-center gap-4">
-            <span className="text-sm text-moss">{user?.username}</span>
+          <div className="flex items-center gap-3">
+            <span className="inline-flex items-center rounded-full bg-emerald-500/10 px-3 py-1 text-xs font-semibold text-emerald-800">
+              {user?.username}
+            </span>
             <button
               type="button"
               onClick={() => logoutMutation.mutate()}
               disabled={logoutMutation.isPending}
-              className="border border-line bg-paper px-3 py-1.5 text-sm hover:border-forest hover:text-forest disabled:opacity-60"
+              className="rounded-full border border-emerald-500/15 bg-white/80 px-3.5 py-1.5 text-xs font-medium text-slate-700 hover:bg-emerald-50 hover:text-emerald-800 hover:border-emerald-500/30 transition-all duration-200 disabled:opacity-60 shadow-xs"
             >
               Выйти
             </button>
