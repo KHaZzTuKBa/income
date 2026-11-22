@@ -24,7 +24,7 @@ from app.services.invest_types import (
     currency_code_of,
 )
 from app.services.quotes import fetch_last_prices
-from app.services.sync import get_connection
+from app.services.sync import active_connections_query, get_connection
 from app.services.xirr import investor_cashflows, moscow_today, xirr_percent
 
 logger = logging.getLogger("portfel.portfolio")
@@ -404,7 +404,7 @@ async def build_dashboard(session: AsyncSession, user: User, *, live: bool = Tru
 
 async def refresh_stored_prices() -> None:
     async with db_module.SessionLocal() as session:
-        result = await session.execute(select(BrokerConnection))
+        result = await session.execute(active_connections_query())
         connections = list(result.scalars())
 
     for connection in connections:

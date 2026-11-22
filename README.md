@@ -18,10 +18,12 @@ copy .env.example .env
 docker compose up --build
 ```
 
-- UI: http://localhost:8080
-- OpenAPI: http://localhost:8000/api/docs
+- UI: http://localhost:8180
+- OpenAPI: http://localhost:8180/api/docs (через nginx) или напрямую http://localhost:8100/api/docs
 
-Войдите логином и паролем из `.env` (`APP_USERNAME` / `APP_PASSWORD`).
+Порты на хосте не пересекаются с типичными 8000/8080 других проектов. Если всё же заняты, задайте в `.env` `PORTFEL_WEB_PORT`, `PORTFEL_API_PORT`, `PORTFEL_DB_PORT`.
+
+Логин и пароль из `.env` (`APP_USERNAME` / `APP_PASSWORD`) — это администратор: он одобряет заявки на регистрацию и управляет аккаунтами, своего портфеля у него нет. Чтобы вести портфель, зарегистрируйтесь на `/register` и одобрите заявку под админом.
 
 Дальше: Настройки → вставьте read-only токен Invest API → «Сохранить токен» → «Обновить». Токен проверяется через GetAccounts, шифруется Fernet и в UI не возвращается. Синк по расписанию — в 08:00 и 20:00 по Москве.
 
@@ -42,7 +44,7 @@ python -m venv .venv
 .venv\Scripts\activate
 pip install -r requirements.txt -r requirements-dev.txt
 alembic upgrade head
-uvicorn app.main:app --reload --port 8000
+uvicorn app.main:app --reload --port 8100
 ```
 
 Фронт (из `frontend/`, Node 22):
@@ -52,7 +54,7 @@ npm ci
 npm run dev
 ```
 
-Vite на http://localhost:5173 проксирует `/api` на бэкенд.
+Vite на http://localhost:5173 проксирует `/api` на бэкенд `localhost:8100`. Если контейнер api из compose запущен, локальный uvicorn на 8100 не поднимется — остановите его (`docker compose stop api worker`).
 
 ## Тесты и линт
 

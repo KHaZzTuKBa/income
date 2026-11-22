@@ -215,23 +215,19 @@ async def assign_holding(session: AsyncSession, user: User, body: AssignmentIn) 
     if not figi:
         raise CategoryError("Не указан инструмент")
     existing = (
-        await session.execute(select(HoldingCategory).where(HoldingCategory.figi == figi))
+        await session.execute(
+            select(HoldingCategory).where(HoldingCategory.user_id == user.id, HoldingCategory.figi == figi)
+        )
     ).scalar_one_or_none()
     if body.category_id is None:
         if existing is not None:
-            owner = await session.get(Category, existing.category_id)
-            if owner is None or owner.user_id != user.id:
-                raise CategoryError("Категория не найдена", 404)
             await session.delete(existing)
             await session.commit()
         return
     category = await _owned_category(session, user.id, body.category_id)
     if existing is None:
-        session.add(HoldingCategory(category_id=category.id, figi=figi))
+        session.add(HoldingCategory(user_id=user.id, category_id=category.id, figi=figi))
     else:
-        owner = await session.get(Category, existing.category_id)
-        if owner is None or owner.user_id != user.id:
-            raise CategoryError("Категория не найдена", 404)
         existing.category_id = category.id
     await session.commit()
 

@@ -39,9 +39,13 @@ class Category(Base):
 
 class HoldingCategory(Base):
     __tablename__ = "holdings_categories"
-    __table_args__ = (UniqueConstraint("figi", name="uq_holdings_categories_figi"),)
+    __table_args__ = (UniqueConstraint("user_id", "figi", name="uq_holdings_categories_user_figi"),)
 
     id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"),
+        index=True,
+    )
     category_id: Mapped[int] = mapped_column(
         ForeignKey("categories.id", ondelete="CASCADE"),
         index=True,

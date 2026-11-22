@@ -48,13 +48,16 @@ class BrokerConnection(Base):
 
 class Account(Base):
     __tablename__ = "accounts"
+    __table_args__ = (
+        UniqueConstraint("connection_id", "broker_account_id", name="uq_accounts_connection_broker_id"),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True)
     connection_id: Mapped[int] = mapped_column(
         ForeignKey("broker_connections.id", ondelete="CASCADE"),
         index=True,
     )
-    broker_account_id: Mapped[str] = mapped_column(String(64), unique=True)
+    broker_account_id: Mapped[str] = mapped_column(String(64), index=True)
     name: Mapped[str] = mapped_column(String(128), default="")
     type: Mapped[str] = mapped_column(String(32), default="broker")
     status: Mapped[str] = mapped_column(String(16), default="open")

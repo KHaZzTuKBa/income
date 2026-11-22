@@ -5,7 +5,7 @@ from httpx import AsyncClient
 from sqlalchemy import select
 
 from app import db as db_module
-from app.models import BrokerConnection, Instrument, Operation
+from app.models import BrokerConnection, Instrument, Operation, User
 from app.services.crypto import decrypt_secret, encrypt_secret
 from app.services.invest_types import (
     AccountDTO,
@@ -16,6 +16,11 @@ from app.services.invest_types import (
     PositionDTO,
 )
 from app.services.sync import _upsert_instruments, begin_manual_sync, run_sync_job
+from tests.conftest import INVESTOR_USERNAME
+
+
+async def investor_id(session, username: str = INVESTOR_USERNAME) -> int:
+    return (await session.execute(select(User.id).where(User.username == username))).scalar_one()
 
 
 def _payload() -> InvestPayload:
@@ -148,7 +153,7 @@ async def test_sync_persists_and_is_idempotent(auth_client: AsyncClient, monkeyp
     assert saved.status_code == 200
 
     async with db_module.SessionLocal() as session:
-        run = await begin_manual_sync(session, user_id=1)
+        run = await begin_manual_sync(session, user_id=await investor_id(session))
         run_id, connection_id = run.id, run.connection_id
     await run_sync_job(connection_id, run_id)
 
@@ -170,7 +175,7 @@ async def test_sync_persists_and_is_idempotent(auth_client: AsyncClient, monkeyp
     assert connection.json()["operations_count"] == 1
 
     async with db_module.SessionLocal() as session:
-        run = await begin_manual_sync(session, user_id=1)
+        run = await begin_manual_sync(session, user_id=await investor_id(session))
         await run_sync_job(run.connection_id, run.id)
         count = len((await session.execute(select(Operation))).scalars().all())
         assert count == 1

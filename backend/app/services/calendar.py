@@ -25,7 +25,7 @@ from app.services.invest import fetch_income_forecasts
 from app.services.invest_types import CURRENCY_FIGI, INCOME_TYPES
 from app.services.portfolio import is_cash_position, money_str, to_rub
 from app.services.quotes import fetch_last_prices
-from app.services.sync import get_connection
+from app.services.sync import active_connections_query, get_connection
 
 logger = logging.getLogger("portfel.calendar")
 
@@ -81,7 +81,7 @@ async def build_calendar(
 
 async def refresh_all_forecasts() -> None:
     async with db_module.SessionLocal() as session:
-        result = await session.execute(select(BrokerConnection))
+        result = await session.execute(active_connections_query())
         connections = list(result.scalars())
     for connection in connections:
         if connection.status == "running":

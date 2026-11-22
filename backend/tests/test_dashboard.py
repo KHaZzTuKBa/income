@@ -8,7 +8,8 @@ from app import db as db_module
 from app.services.invest_types import InstrumentDTO, OperationDTO, PositionDTO
 from app.services.portfolio import quoted_unit_price, remaining_lots
 from app.services.sync import begin_manual_sync, run_sync_job
-from tests.test_sync import _payload
+from tests.conftest import INVESTOR_USERNAME
+from tests.test_sync import _payload, investor_id
 
 
 def _buy(
@@ -75,7 +76,13 @@ def _output(amount: Decimal, when: datetime) -> OperationDTO:
     )
 
 
-async def _seed(auth_client: AsyncClient, monkeypatch, payload, prices: dict[str, Decimal] | None) -> None:
+async def _seed(
+    auth_client: AsyncClient,
+    monkeypatch,
+    payload,
+    prices: dict[str, Decimal] | None,
+    username: str = INVESTOR_USERNAME,
+) -> None:
     async def fake_ping(_token: str) -> None:
         return None
 
@@ -98,7 +105,7 @@ async def _seed(auth_client: AsyncClient, monkeypatch, payload, prices: dict[str
     assert saved.status_code == 200
 
     async with db_module.SessionLocal() as session:
-        run = await begin_manual_sync(session, user_id=1)
+        run = await begin_manual_sync(session, user_id=await investor_id(session, username))
         run_id, connection_id = run.id, run.connection_id
     await run_sync_job(connection_id, run_id)
 

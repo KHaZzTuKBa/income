@@ -1,5 +1,6 @@
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { listUsers } from "../api/admin";
 import { getMe, logout } from "../api/auth";
 
 const linkClass = ({ isActive }: { isActive: boolean }) =>
@@ -13,12 +14,20 @@ export function AppLayout() {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const { data: user } = useQuery({ queryKey: ["me"], queryFn: getMe });
+  const isAdmin = user?.is_admin === true;
+
+  const pending = useQuery({
+    queryKey: ["admin-users", ["pending"], ""],
+    queryFn: () => listUsers(["pending"], ""),
+    enabled: isAdmin,
+  });
+  const pendingCount = pending.data?.counts.pending ?? 0;
 
   const logoutMutation = useMutation({
     mutationFn: logout,
-    onSuccess: async () => {
+    onSuccess: () => {
+      queryClient.clear();
       queryClient.setQueryData(["me"], null);
-      await queryClient.invalidateQueries({ queryKey: ["me"] });
       navigate("/login", { replace: true });
     },
   });
@@ -34,25 +43,47 @@ export function AppLayout() {
               </span>
               <div>
                 <p className="font-bold text-lg leading-tight tracking-tight text-slate-900">Portfel</p>
-                <p className="text-[11px] font-medium text-emerald-700/80">Личный учёт портфеля</p>
+                <p className="text-[11px] font-medium text-emerald-700/80">
+                  {isAdmin ? "Администрирование" : "Личный учёт портфеля"}
+                </p>
               </div>
             </div>
             <nav className="flex flex-wrap items-center gap-1.5">
-              <NavLink to="/" end className={linkClass}>
-                Дашборд
-              </NavLink>
-              <NavLink to="/categories" className={linkClass}>
-                Категории
-              </NavLink>
-              <NavLink to="/sectors" className={linkClass}>
-                Отрасли
-              </NavLink>
-              <NavLink to="/calendar" className={linkClass}>
-                Календарь
-              </NavLink>
-              <NavLink to="/settings" className={linkClass}>
-                Настройки
-              </NavLink>
+              {isAdmin ? (
+                <>
+                  <NavLink to="/admin/requests" className={linkClass}>
+                    <span className="inline-flex items-center gap-1.5">
+                      Заявки
+                      {pendingCount > 0 ? (
+                        <span className="inline-flex min-w-5 justify-center rounded-full bg-amber-500 px-1.5 text-[11px] font-bold leading-5 text-white">
+                          {pendingCount}
+                        </span>
+                      ) : null}
+                    </span>
+                  </NavLink>
+                  <NavLink to="/admin/users" className={linkClass}>
+                    Пользователи
+                  </NavLink>
+                </>
+              ) : (
+                <>
+                  <NavLink to="/" end className={linkClass}>
+                    Дашборд
+                  </NavLink>
+                  <NavLink to="/categories" className={linkClass}>
+                    Категории
+                  </NavLink>
+                  <NavLink to="/sectors" className={linkClass}>
+                    Отрасли
+                  </NavLink>
+                  <NavLink to="/calendar" className={linkClass}>
+                    Календарь
+                  </NavLink>
+                  <NavLink to="/settings" className={linkClass}>
+                    Настройки
+                  </NavLink>
+                </>
+              )}
             </nav>
           </div>
           <div className="flex items-center gap-3">

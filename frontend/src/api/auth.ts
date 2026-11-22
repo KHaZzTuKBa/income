@@ -1,6 +1,18 @@
+import { apiJson } from "./http";
+
 export type User = {
   id: number;
   username: string;
+  is_admin: boolean;
+  email: string | null;
+  phone: string | null;
+};
+
+export type RegisterBody = {
+  username: string;
+  email: string;
+  phone: string;
+  password: string;
 };
 
 async function parseError(response: Response, fallback: string): Promise<string> {
@@ -13,6 +25,10 @@ async function parseError(response: Response, fallback: string): Promise<string>
     // ignore non-JSON bodies
   }
   return fallback;
+}
+
+export function homePath(user: User): string {
+  return user.is_admin ? "/admin/requests" : "/";
 }
 
 export async function getMe(): Promise<User | null> {
@@ -47,4 +63,18 @@ export async function logout(): Promise<void> {
   if (!response.ok && response.status !== 204) {
     throw new Error(await parseError(response, "Не удалось выйти"));
   }
+}
+
+export function register(body: RegisterBody) {
+  return apiJson<{ status: string }>("/api/auth/register", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+export function changePassword(currentPassword: string, newPassword: string) {
+  return apiJson<void>("/api/auth/password", {
+    method: "POST",
+    body: JSON.stringify({ current_password: currentPassword, new_password: newPassword }),
+  });
 }

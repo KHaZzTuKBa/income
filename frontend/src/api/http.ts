@@ -26,7 +26,11 @@ export async function apiJson<T>(path: string, init?: RequestInit): Promise<T> {
     headers,
   });
   if (!response.ok) {
-    throw new Error(await parseError(response, "Ошибка запроса"));
+    const message = await parseError(response, "Ошибка запроса");
+    if (response.status === 401 && window.location.pathname !== "/login") {
+      window.location.assign(`/login?reason=${encodeURIComponent(message)}`);
+    }
+    throw new Error(message);
   }
   if (response.status === 204) {
     return undefined as T;

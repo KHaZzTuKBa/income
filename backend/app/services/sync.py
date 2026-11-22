@@ -9,7 +9,8 @@ from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app import db as db_module
-from app.models import Account, BrokerConnection, Instrument, Operation, Position, SyncRun
+from app.models import Account, BrokerConnection, Instrument, Operation, Position, SyncRun, User
+from app.models.user import USER_ACTIVE
 from app.services.crypto import CryptoError, decrypt_secret
 from app.services.invest import load_invest_data
 from app.services.invest_types import (
@@ -38,6 +39,15 @@ async def get_connection(session: AsyncSession, user_id: int) -> BrokerConnectio
         select(BrokerConnection).where(BrokerConnection.user_id == user_id)
     )
     return result.scalar_one_or_none()
+
+
+def active_connections_query():
+    return (
+        select(BrokerConnection)
+        .join(User, User.id == BrokerConnection.user_id)
+        .where(User.status == USER_ACTIVE)
+        .order_by(BrokerConnection.id)
+    )
 
 
 async def begin_manual_sync(session: AsyncSession, user_id: int) -> SyncRun:
@@ -84,7 +94,7 @@ async def run_sync_job(connection_id: int, run_id: int) -> None:
 
 async def run_scheduled_sync() -> None:
     async with db_module.SessionLocal() as session:
-        result = await session.execute(select(BrokerConnection))
+        result = await session.execute(active_connections_query())
         connections = list(result.scalars())
 
     for connection in connections:

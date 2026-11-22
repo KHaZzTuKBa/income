@@ -16,7 +16,13 @@ from sqlalchemy.pool import StaticPool
 from app import db as db_module
 from app.db import Base
 from app.main import app
+from app.models import User
+from app.models.user import USER_ACTIVE
+from app.security import hash_password
 from app.seed import seed_user
+
+INVESTOR_USERNAME = "investor"
+TEST_PASSWORD = "test-password"
 
 
 @pytest.fixture(autouse=True)
@@ -46,6 +52,16 @@ async def client() -> AsyncClient:
 
     async with factory() as session:
         await seed_user(session)
+        session.add(
+            User(
+                username=INVESTOR_USERNAME,
+                password_hash=hash_password(TEST_PASSWORD),
+                email="investor@example.com",
+                phone="+79990000001",
+                status=USER_ACTIVE,
+            )
+        )
+        await session.commit()
 
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as ac:
@@ -58,7 +74,19 @@ async def client() -> AsyncClient:
 async def auth_client(client: AsyncClient) -> AsyncClient:
     response = await client.post(
         "/api/auth/login",
-        json={"username": "admin", "password": "test-password"},
+        json={"username": INVESTOR_USERNAME, "password": TEST_PASSWORD},
     )
     assert response.status_code == 200
     return client
+
+
+@pytest.fixture
+async def admin_client(client: AsyncClient) -> AsyncClient:
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as ac:
+        response = await ac.post(
+            "/api/auth/login",
+            json={"username": "admin", "password": TEST_PASSWORD},
+        )
+        assert response.status_code == 200
+        yield ac

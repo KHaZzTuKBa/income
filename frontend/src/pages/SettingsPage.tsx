@@ -1,6 +1,11 @@
 import { type FormEvent, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { changePassword, getMe } from "../api/auth";
 import { getConnection, getSyncRuns, saveToken, startSync } from "../api/invest";
+import { validatePassword } from "../validation";
+
+const inputClass =
+  "w-full rounded-2xl border border-slate-200 bg-slate-50/60 px-4 py-2.5 text-sm text-slate-900 outline-none transition-all duration-200 hover:border-emerald-400/50 focus:border-emerald-500 focus:bg-white focus:ring-4 focus:ring-emerald-500/10";
 
 function formatWhen(value: string | null): string {
   if (!value) {
@@ -22,6 +27,101 @@ function statusLabel(status: string | null): string {
     default:
       return "нет данных";
   }
+}
+
+function PasswordForm() {
+  const [current, setCurrent] = useState("");
+  const [next, setNext] = useState("");
+  const [confirm, setConfirm] = useState("");
+  const [localError, setLocalError] = useState<string | null>(null);
+  const { data: user } = useQuery({ queryKey: ["me"], queryFn: getMe });
+
+  const mutation = useMutation({
+    mutationFn: () => changePassword(current, next),
+    onSuccess: () => {
+      setCurrent("");
+      setNext("");
+      setConfirm("");
+    },
+  });
+
+  function onSubmit(event: FormEvent) {
+    event.preventDefault();
+    mutation.reset();
+    const problem = validatePassword(next, user?.username ?? "");
+    if (problem) {
+      setLocalError(`Новый пароль: ${problem.toLowerCase()}`);
+      return;
+    }
+    if (next !== confirm) {
+      setLocalError("Пароли не совпадают");
+      return;
+    }
+    setLocalError(null);
+    mutation.mutate();
+  }
+
+  const error = localError ?? (mutation.error instanceof Error ? mutation.error.message : null);
+
+  return (
+    <div>
+      <h2 className="text-xl sm:text-2xl font-bold tracking-tight text-slate-900">Смена пароля</h2>
+      <form
+        className="mt-4 max-w-xl space-y-4 rounded-3xl border border-emerald-500/15 bg-white p-6 sm:p-7 shadow-sm"
+        onSubmit={onSubmit}
+      >
+        <label className="block">
+          <span className="block text-xs font-semibold uppercase tracking-wider text-slate-600 mb-1.5">
+            Текущий пароль
+          </span>
+          <input
+            type="password"
+            className={inputClass}
+            value={current}
+            onChange={(event) => setCurrent(event.target.value)}
+            autoComplete="current-password"
+            required
+          />
+        </label>
+        <label className="block">
+          <span className="block text-xs font-semibold uppercase tracking-wider text-slate-600 mb-1.5">
+            Новый пароль
+          </span>
+          <input
+            type="password"
+            className={inputClass}
+            value={next}
+            onChange={(event) => setNext(event.target.value)}
+            autoComplete="new-password"
+            placeholder="Минимум 8 символов, буквы и цифры"
+            required
+          />
+        </label>
+        <label className="block">
+          <span className="block text-xs font-semibold uppercase tracking-wider text-slate-600 mb-1.5">
+            Повторите новый пароль
+          </span>
+          <input
+            type="password"
+            className={inputClass}
+            value={confirm}
+            onChange={(event) => setConfirm(event.target.value)}
+            autoComplete="new-password"
+            required
+          />
+        </label>
+        {error ? <p className="text-sm text-danger">{error}</p> : null}
+        {mutation.isSuccess ? <p className="text-sm text-emerald-700">Пароль изменён</p> : null}
+        <button
+          type="submit"
+          disabled={mutation.isPending}
+          className="inline-flex items-center gap-2 rounded-full bg-emerald-600 hover:bg-emerald-700 text-white px-6 py-2.5 text-sm font-semibold shadow-sm shadow-emerald-600/20 transition-all duration-200 active:scale-95 disabled:opacity-50 cursor-pointer"
+        >
+          {mutation.isPending ? "Сохраняем…" : "Сменить пароль"}
+        </button>
+      </form>
+    </div>
+  );
 }
 
 export function SettingsPage() {
@@ -222,6 +322,8 @@ export function SettingsPage() {
           </div>
         </div>
       </div>
+
+      <PasswordForm />
     </section>
   );
 }
